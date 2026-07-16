@@ -1,5 +1,5 @@
 ---
-title: "Quick Start: Your First N-Gate API Request"
+title: "N-Gate Quick Start: Authenticate and Make Your First Request"
 sidebarTitle: "Quick Start"
 description: "Authenticate with N-Gate, create a Workspace, register a route, and make your first proxied API request — all in under five minutes."
 ---
@@ -52,7 +52,7 @@ This guide walks you through the four essential steps to start using N-Gate: obt
 
     Copy the value of `token` — you'll include it as a `Bearer` token in the `Authorization` header for every subsequent request:
 
-    ```
+    ```text
     Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
     ```
 
@@ -118,7 +118,7 @@ This guide walks you through the four essential steps to start using N-Gate: obt
       -H "Authorization: Bearer <YOUR_TOKEN>" \
       -d '{
         "path": "/api/v1/payments",
-        "target": "https://payments.internal.example.com",
+        "target": "https://payments.example.com/v1",
         "method": "POST"
       }'
     ```
@@ -127,8 +127,8 @@ This guide walks you through the four essential steps to start using N-Gate: obt
 
     **Request body**
 
-    | Field    | Type   | Required | Description                                                 |
-    |----------|--------|----------|-------------------------------------------------------------|
+    | Field    | Type   | Required | Description                                                  |
+    |----------|--------|----------|--------------------------------------------------------------|
     | `path`   | string | ✓        | The inbound path N-Gate will match against incoming requests |
     | `target` | string | ✓        | The full URL of the upstream service to forward requests to  |
     | `method` | string | ✓        | The HTTP method this route handles (e.g., `GET`, `POST`)     |
@@ -139,7 +139,7 @@ This guide walks you through the four essential steps to start using N-Gate: obt
     {
       "id": "route_xyz789",
       "path": "/api/v1/payments",
-      "target": "https://payments.internal.example.com",
+      "target": "https://payments.example.com/v1",
       "method": "POST",
       "workspaceId": "ws_abc123",
       "createdAt": "2024-01-15T10:05:00Z"
@@ -167,7 +167,7 @@ This guide walks you through the four essential steps to start using N-Gate: obt
         {
           "id": "route_xyz789",
           "path": "/api/v1/payments",
-          "target": "https://payments.internal.example.com",
+          "target": "https://payments.example.com/v1",
           "method": "POST",
           "workspaceId": "ws_abc123",
           "createdAt": "2024-01-15T10:05:00Z"
@@ -205,10 +205,10 @@ This guide walks you through the four essential steps to start using N-Gate: obt
 
     **Request body**
 
-    | Field     | Type   | Required | Description                                                              |
-    |-----------|--------|----------|--------------------------------------------------------------------------|
-    | `routeId` | string | ✓        | The `id` of the route to proxy this request through                      |
-    | `payload` | object | ✓        | The request body to forward to the upstream service                      |
+    | Field     | Type   | Required | Description                                                         |
+    |-----------|--------|----------|---------------------------------------------------------------------|
+    | `routeId` | string | ✓        | The `id` of the route to proxy this request through                 |
+    | `payload` | object | ✓        | The request body to forward to the upstream service                 |
 
     **Example response**
 
@@ -242,7 +242,7 @@ You've completed the core N-Gate flow. Here's where to go depending on what you 
   <Card title="Authentication Deep Dive" icon="lock" href="/authentication">
     Understand token expiry, error handling, and security best practices for managing Bearer tokens.
   </Card>
-  <Card title="Gateways & Consumers" icon="shield" href="/features/gateway-consumers">
+  <Card title="Gateways & Consumers" icon="shield" href="/concepts/gateways">
     Group your routes into Gateways and control which consumers can access them.
   </Card>
   <Card title="Financial Transactions" icon="credit-card" href="/features/mandates">

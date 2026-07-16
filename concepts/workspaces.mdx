@@ -1,7 +1,7 @@
 ---
-title: "Workspaces: N-Gate's Multi-Tenant Root Container"
+title: "Workspaces: N-Gate's Multi-Tenant Isolation Container"
 sidebarTitle: "Workspaces"
-description: "Learn how N-Gate Workspaces isolate resources, organize members, and enforce Permission Roles across your entire API platform."
+description: "Learn how N-Gate Workspaces isolate resources, organize members, and enforce Permission Roles across your entire API platform through the workspaces API."
 ---
 
 A Workspace is the foundational organizational unit in N-Gate. Every resource you create — routes, gateways, remote hand agents, and mandates — lives inside a workspace, and every API call you make is scoped to a specific workspace through the `workspaceId` parameter. By keeping resources fully isolated per workspace, N-Gate gives you a clean multi-tenant boundary between teams, customers, or environments.
@@ -11,14 +11,14 @@ A Workspace is the foundational organizational unit in N-Gate. Every resource yo
 Think of a workspace as a self-contained universe within N-Gate. Nothing inside one workspace is visible to another workspace. Users, routes, gateway connections, and agent registrations are all namespaced to their parent workspace, so two tenants can operate independently without risk of data leakage or configuration collision.
 
 <Note>
-  Every authenticated API request (except `/auth/login`) requires a valid `workspaceId`. Make sure you store this value after workspace creation — you will reference it in nearly every subsequent call.
+  All workspace endpoints require a valid Bearer token in the `Authorization: Bearer <token>` header. Make sure you store the `workspaceId` returned at creation — you will reference it in nearly every subsequent API call.
 </Note>
 
 ### Workspace Hierarchy
 
 The following diagram illustrates the relationship between a workspace, its members, and the resources it contains:
 
-```
+```text
 ┌─────────────────────────────────────────────────────┐
 │                    WORKSPACE                        │
 │  (workspaceId: wsp_abc123)                          │
@@ -75,30 +75,28 @@ Access control in N-Gate is governed by a **Permission Role triplet**: `workspac
   <Tab title="Create a Workspace">
     <Steps>
       <Step title="Authenticate">
-        Obtain a Bearer token by posting your credentials to `/auth/login`. All subsequent requests must include this token in the `Authorization` header.
+        Obtain a Bearer token by posting your credentials to `/auth/login`. All subsequent requests must include this token in the `Authorization: Bearer <token>` header.
 
-        ```http
-        POST https://api.n-gate.io/auth/login
-        Content-Type: application/json
-
-        {
-          "email": "you@example.com",
-          "password": "your-password"
-        }
+        ```bash curl
+        curl -X POST https://api.n-gate.io/auth/login \
+          -H "Content-Type: application/json" \
+          -d '{
+            "email": "you@example.com",
+            "password": "your-password"
+          }'
         ```
       </Step>
       <Step title="Create the Workspace">
         Send a `POST` request to `/api/workspaces` with a unique name and optional metadata.
 
-        ```http
-        POST https://api.n-gate.io/api/workspaces
-        Authorization: Bearer <token>
-        Content-Type: application/json
-
-        {
-          "name": "production-tenant",
-          "description": "Live production environment for Acme Corp"
-        }
+        ```bash curl
+        curl -X POST https://api.n-gate.io/api/workspaces \
+          -H "Authorization: Bearer <token>" \
+          -H "Content-Type: application/json" \
+          -d '{
+            "name": "production-tenant",
+            "description": "Live production environment for Acme Corp"
+          }'
         ```
       </Step>
       <Step title="Store the workspaceId">
@@ -116,11 +114,11 @@ Access control in N-Gate is governed by a **Permission Role triplet**: `workspac
   </Tab>
 
   <Tab title="List Workspaces">
-    Retrieve all workspaces your account belongs to with a single `GET` request.
+    Retrieve all workspaces your account belongs to with a single `GET` request. Bearer authentication is required.
 
-    ```http
-    GET https://api.n-gate.io/api/workspaces
-    Authorization: Bearer <token>
+    ```bash curl
+    curl -X GET https://api.n-gate.io/api/workspaces \
+      -H "Authorization: Bearer <token>"
     ```
 
     The response returns an array of workspace objects, each containing the `workspaceId`, name, your role within that workspace, and timestamps.
@@ -133,21 +131,20 @@ Access control in N-Gate is governed by a **Permission Role triplet**: `workspac
   <Tab title="Invite Members">
     <Steps>
       <Step title="Send the Invitation">
-        Post to the workspace members endpoint, specifying the invitee's email and the role they should receive.
+        Post to the workspace invite endpoint, specifying the invitee's email and the role they should receive. Bearer authentication is required and you must hold the Admin role in the target workspace.
 
-        ```http
-        POST https://api.n-gate.io/api/workspaces/{workspaceId}/members
-        Authorization: Bearer <token>
-        Content-Type: application/json
-
-        {
-          "email": "colleague@example.com",
-          "roleId": "role_viewer"
-        }
+        ```bash curl
+        curl -X POST https://api.n-gate.io/api/workspaces/{workspaceId}/invite \
+          -H "Authorization: Bearer <token>" \
+          -H "Content-Type: application/json" \
+          -d '{
+            "email": "colleague@example.com",
+            "roleId": "role_viewer"
+          }'
         ```
       </Step>
       <Step title="Confirm the Invitation">
-        The invitee receives an email with a confirmation link. Once they accept, their account is linked to the workspace with the assigned role. You can list pending invitations at any time using `GET /api/workspaces/{workspaceId}/invitations`.
+        The invitee receives an email with a confirmation link. Once they accept, their account is linked to the workspace with the assigned role.
       </Step>
     </Steps>
 
@@ -156,17 +153,28 @@ Access control in N-Gate is governed by a **Permission Role triplet**: `workspac
     </Warning>
   </Tab>
 
-  <Tab title="Assign Roles">
-    Update a member's role by sending a `PATCH` request to their membership record.
+  <Tab title="Manage Permissions">
+    View and update the Permission Role triplet for workspace members using the `/api/workspaces/:id/permissions` endpoints. Both operations require Bearer authentication and Admin role.
 
-    ```http
-    PATCH https://api.n-gate.io/api/workspaces/{workspaceId}/members/{memberId}
-    Authorization: Bearer <token>
-    Content-Type: application/json
+    **View current permissions**
 
-    {
-      "roleId": "role_editor"
-    }
+    ```bash curl
+    curl -X GET https://api.n-gate.io/api/workspaces/{workspaceId}/permissions \
+      -H "Authorization: Bearer <token>"
+    ```
+
+    The response lists all active `workspaceId + permissionId + roleId` triplets for every member in the workspace.
+
+    **Update a member's permissions**
+
+    ```bash curl
+    curl -X PUT https://api.n-gate.io/api/workspaces/{workspaceId}/permissions \
+      -H "Authorization: Bearer <token>" \
+      -H "Content-Type: application/json" \
+      -d '{
+        "permissionId": "perm_abc456",
+        "roleId": "role_editor"
+      }'
     ```
 
     N-Gate immediately applies the updated Permission Role triplet (`workspaceId` + `permissionId` + `roleId`). Any in-flight tokens the member holds will reflect the new permissions on their next request.

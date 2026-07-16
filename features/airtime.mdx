@@ -1,10 +1,12 @@
 ---
-title: "Airtime Transactions: Manage Telecom Top-Ups"
+title: "Airtime Transactions: Track, Filter & Reconcile Top-Ups"
 sidebarTitle: "Airtime"
-description: "Track, filter, and reconcile airtime transactions across telecom providers using N-Gate's unified transaction management API."
+description: "Track, filter, and reconcile airtime top-up transactions across telecom providers using N-Gate's paginated transaction management API."
 ---
 
 N-Gate integrates directly with telecom providers so you can manage the full lifecycle of airtime transactions from a single control plane. Whether you're building a top-up service, reconciling billing records, or monitoring real-time transaction status, the Airtime Transactions API gives you consistent, paginated access to every transaction your workspace has initiated.
+
+All endpoints in this section are protected. Include `Authorization: Bearer <token>` in every request.
 
 ## Transaction Fields
 
@@ -52,6 +54,10 @@ Retrieve a paginated list of all airtime transactions in your workspace. You can
 
 ### Query Parameters
 
+<ParamField query="workspaceId" type="string">
+  Filter results to a specific workspace. Defaults to the workspace associated with your token.
+</ParamField>
+
 <ParamField query="status" type="string">
   Filter by transaction status. Accepted values: `pending`, `completed`, `failed`.
 </ParamField>
@@ -60,11 +66,11 @@ Retrieve a paginated list of all airtime transactions in your workspace. You can
   Filter by telecom provider name (e.g. `MTN`).
 </ParamField>
 
-<ParamField query="from" type="string">
+<ParamField query="startDate" type="string">
   Start of the date range in ISO 8601 format (e.g. `2024-01-01T00:00:00Z`).
 </ParamField>
 
-<ParamField query="to" type="string">
+<ParamField query="endDate" type="string">
   End of the date range in ISO 8601 format (e.g. `2024-01-31T23:59:59Z`).
 </ParamField>
 
@@ -109,7 +115,7 @@ curl -X GET "https://api.n-gate.io/api/airtime-transactions" \
 ### Example: Filter by Status and Date Range
 
 ```bash
-curl -X GET "https://api.n-gate.io/api/airtime-transactions?status=completed&from=2024-01-01T00:00:00Z&to=2024-01-31T23:59:59Z" \
+curl -X GET "https://api.n-gate.io/api/airtime-transactions?status=completed&startDate=2024-01-01T00:00:00Z&endDate=2024-01-31T23:59:59Z" \
   -H "Authorization: Bearer <token>"
 ```
 
@@ -123,6 +129,36 @@ curl -X GET "https://api.n-gate.io/api/airtime-transactions?provider=MTN&page=1&
 <Note>
   All list requests are scoped to your workspace. Ensure you include a valid `Authorization: Bearer <token>` header on every request.
 </Note>
+
+---
+
+## Get a Single Transaction
+
+Retrieve the full details of a specific airtime transaction by its ID.
+
+**`GET /api/airtime-transactions/:id`**
+
+### Example
+
+```bash
+curl -X GET "https://api.n-gate.io/api/airtime-transactions/txn_abc" \
+  -H "Authorization: Bearer <token>"
+```
+
+### Example Response
+
+```json
+{
+  "id": "txn_abc",
+  "workspaceId": "ws_123",
+  "amount": 100,
+  "currency": "NGN",
+  "recipient": "+2341234567890",
+  "provider": "MTN",
+  "status": "completed",
+  "createdAt": "2024-01-15T10:00:00Z"
+}
+```
 
 ---
 
@@ -168,7 +204,7 @@ pending  ──►  completed
 
 ## Use Cases
 
-<CardGroup cols={3}>
+<CardGroup cols={2}>
   <Card title="Top-Up Services" icon="mobile">
     Programmatically top up customer phones and confirm delivery using the `completed` status before fulfilling orders.
   </Card>
@@ -177,5 +213,8 @@ pending  ──►  completed
   </Card>
   <Card title="Transaction Reconciliation" icon="scale-balanced">
     Compare `pending` and `failed` counts against `completed` counts across providers to identify settlement discrepancies.
+  </Card>
+  <Card title="Audit & Reporting" icon="magnifying-glass-chart">
+    Retrieve individual transactions by ID to support dispute resolution, compliance audits, or customer support inquiries.
   </Card>
 </CardGroup>

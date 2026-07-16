@@ -1,10 +1,10 @@
 ---
-title: "Proxy Routes: Dynamic API Endpoints in N-Gate"
+title: "Proxy Routes: Create and Manage API Routes in N-Gate"
 sidebarTitle: "Proxy Routes"
-description: "Define, manage, and proxy API routes through N-Gate to route traffic from a single gateway to any upstream service you control."
+description: "Register upstream routes on N-Gate, forward live requests through them with custom headers and payloads, and manage the full route lifecycle."
 ---
 
-Proxy Routes are the core traffic-routing primitive in N-Gate. Each route binds a public-facing path and HTTP method to an upstream URL, letting you expose a clean, versioned API surface while keeping your internal services hidden behind the gateway. Once a route exists, you can forward live requests through it in a single API call — N-Gate handles the hop to the upstream and passes the response back to you.
+Proxy Routes are the core traffic-routing primitive in N-Gate. Each route binds a public-facing path and HTTP method to an upstream URL, letting you expose a clean, versioned API surface while keeping your upstream services hidden behind the gateway. Once a route exists, you can forward live requests through it in a single API call — N-Gate handles the hop to the upstream and passes the response back to you.
 
 ## Route object
 
@@ -36,7 +36,7 @@ POST /api/routes
 </ParamField>
 
 <ParamField body="target" type="string" required>
-  The full upstream URL to which N-Gate forwards matched requests. Example: `https://payments.internal.io`.
+  The full upstream URL to which N-Gate forwards matched requests. Example: `https://payments.example.com`.
 </ParamField>
 
 <ParamField body="method" type="string" required>
@@ -55,7 +55,7 @@ curl -X POST "https://api.n-gate.io/api/routes" \
   -H "Content-Type: application/json" \
   -d '{
     "path": "/api/v1/payments",
-    "target": "https://payments.internal.io",
+    "target": "https://payments.example.com",
     "method": "POST",
     "workspaceId": "ws_123"
   }'
@@ -67,7 +67,7 @@ curl -X POST "https://api.n-gate.io/api/routes" \
 {
   "id": "route_abc",
   "path": "/api/v1/payments",
-  "target": "https://payments.internal.io",
+  "target": "https://payments.example.com",
   "method": "POST",
   "workspaceId": "ws_123",
   "createdAt": "2024-01-15T10:00:00Z"
@@ -104,7 +104,7 @@ curl -X GET "https://api.n-gate.io/api/routes" \
   {
     "id": "route_abc",
     "path": "/api/v1/payments",
-    "target": "https://payments.internal.io",
+    "target": "https://payments.example.com",
     "method": "POST",
     "workspaceId": "ws_123",
     "createdAt": "2024-01-15T10:00:00Z"
@@ -116,7 +116,7 @@ curl -X GET "https://api.n-gate.io/api/routes" \
 
 ## Proxy a request
 
-Forward a live request through a registered route. N-Gate resolves the route's target URL, forwards the payload, and returns the upstream response to the caller.
+Forward a live request through a registered route. N-Gate resolves the route's target URL, forwards the payload and any additional headers you supply, and returns the upstream response to the caller.
 
 ### Endpoint
 
@@ -134,6 +134,10 @@ POST /api/routes/proxy
   Optional request body to forward to the upstream service. Omit for routes that don't expect a body.
 </ParamField>
 
+<ParamField body="headers" type="object">
+  Optional key-value map of HTTP headers to include in the upstream request. Use this to pass authentication tokens, correlation IDs, or any other headers your upstream service expects.
+</ParamField>
+
 ### Example
 
 ```bash
@@ -145,6 +149,10 @@ curl -X POST "https://api.n-gate.io/api/routes/proxy" \
     "payload": {
       "amount": 500,
       "currency": "USD"
+    },
+    "headers": {
+      "X-Correlation-Id": "req_9f1a2b3c",
+      "X-Upstream-Api-Key": "<upstream-key>"
     }
   }'
 ```
@@ -201,10 +209,10 @@ curl -X DELETE "https://api.n-gate.io/api/routes/route_abc" \
     Call `GET /api/routes` and confirm your new route appears with the correct `path` and `target`.
   </Step>
   <Step title="Proxy a test request">
-    Send a proxy request with the `routeId` and a sample `payload` to validate end-to-end connectivity with your upstream.
+    Send a proxy request with the `routeId`, a sample `payload`, and any required `headers` to validate end-to-end connectivity with your upstream.
   </Step>
   <Step title="Integrate into your application">
-    Update your application to call `POST /api/routes/proxy` with the appropriate `routeId` for each upstream interaction.
+    Update your application to call `POST /api/routes/proxy` with the appropriate `routeId`, `payload`, and `headers` for each upstream interaction.
   </Step>
   <Step title="Delete when no longer needed">
     Call `DELETE /api/routes/:id` to remove routes that are no longer in use and keep your workspace clean.
@@ -222,7 +230,7 @@ curl -X DELETE "https://api.n-gate.io/api/routes/route_abc" \
     ```json
     {
       "path": "/api/v1/inventory",
-      "target": "https://inventory.internal.io",
+      "target": "https://inventory.example.com",
       "method": "GET",
       "workspaceId": "ws_123"
     }
@@ -233,8 +241,8 @@ curl -X DELETE "https://api.n-gate.io/api/routes/route_abc" \
 
     ```json
     [
-      { "path": "/api/v1/orders", "target": "https://orders.internal.io", "method": "GET" },
-      { "path": "/api/v1/orders", "target": "https://orders.internal.io", "method": "POST" }
+      { "path": "/api/v1/orders", "target": "https://orders.example.com", "method": "GET" },
+      { "path": "/api/v1/orders", "target": "https://orders.example.com", "method": "POST" }
     ]
     ```
   </Tab>
@@ -243,8 +251,8 @@ curl -X DELETE "https://api.n-gate.io/api/routes/route_abc" \
 
     ```json
     [
-      { "path": "/api/v1/users", "target": "https://users-v1.internal.io", "method": "GET" },
-      { "path": "/api/v2/users", "target": "https://users-v2.internal.io", "method": "GET" }
+      { "path": "/api/v1/users", "target": "https://users-v1.example.com", "method": "GET" },
+      { "path": "/api/v2/users", "target": "https://users-v2.example.com", "method": "GET" }
     ]
     ```
   </Tab>

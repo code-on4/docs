@@ -1,10 +1,12 @@
 ---
-title: "Workspaces API — Manage Multi-Tenant Workspaces"
+title: "Workspaces API — List, Create, and Retrieve Workspaces"
 sidebarTitle: "Workspaces"
 description: "Create, retrieve, and list workspaces in N-Gate. Workspaces are the top-level multi-tenant container for routes, members, and permissions."
 ---
 
 Workspaces are the foundational organizational unit in N-Gate. Every route, member, and permission belongs to a workspace, allowing teams to isolate their gateway configurations and access controls. The Workspaces API lets you list all workspaces you belong to, create new ones, and retrieve details about a specific workspace — including its current membership count.
+
+All Workspaces API endpoints require an `Authorization: Bearer <token>` header. Requests without a valid token receive a `401 Unauthorized` response.
 
 ---
 
@@ -65,9 +67,8 @@ Returns a paginated list of all workspaces the authenticated user is a member of
 
 <CodeGroup>
 ```bash cURL
-curl --request GET \
-  --url "https://api.n-gate.io/api/workspaces?page=1&limit=20" \
-  --header "Authorization: Bearer <token>"
+curl -X GET "https://api.n-gate.io/api/workspaces?page=1&limit=20" \
+  -H "Authorization: Bearer $TOKEN"
 ```
 
 ```json Response
@@ -141,11 +142,10 @@ Creates a new workspace and automatically adds the authenticated user as its own
 
 <CodeGroup>
 ```bash cURL
-curl --request POST \
-  --url "https://api.n-gate.io/api/workspaces" \
-  --header "Authorization: Bearer <token>" \
-  --header "Content-Type: application/json" \
-  --data '{
+curl -X POST "https://api.n-gate.io/api/workspaces" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
     "name": "Payments Team",
     "description": "Workspace for the payments integration squad."
   }'
@@ -207,9 +207,8 @@ Retrieves full details for a single workspace, including its current member coun
 
 <CodeGroup>
 ```bash cURL
-curl --request GET \
-  --url "https://api.n-gate.io/api/workspaces/ws_01hx9zt3m5kbf2qp" \
-  --header "Authorization: Bearer <token>"
+curl -X GET "https://api.n-gate.io/api/workspaces/ws_01hx9zt3m5kbf2qp" \
+  -H "Authorization: Bearer $TOKEN"
 ```
 
 ```json Response

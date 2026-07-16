@@ -1,7 +1,7 @@
 ---
-title: "Authentication: Bearer Tokens in N-Gate"
+title: "N-Gate Authentication: How to Use Bearer Tokens Securely"
 sidebarTitle: "Authentication"
-description: "Learn how to obtain and use Bearer tokens to authenticate with N-Gate, handle token expiry, and follow security best practices."
+description: "Learn how to obtain and use Bearer tokens to authenticate every N-Gate API request, handle token expiry gracefully, and follow security best practices."
 ---
 
 N-Gate uses Bearer token authentication to protect every endpoint on the platform. When you log in, N-Gate issues a signed JSON Web Token (JWT) that proves your identity and encodes your Workspace memberships and permission roles. You include this token in the `Authorization` header of every subsequent API request — no cookies, no API keys, no session state. This stateless model makes N-Gate easy to integrate from any HTTP client, script, or service.
@@ -12,7 +12,7 @@ N-Gate uses Bearer token authentication to protect every endpoint on the platfor
 
 Every API request you send to N-Gate (except `POST /auth/login`) must include an `Authorization` header in the following format:
 
-```
+```text
 Authorization: Bearer <your-token>
 ```
 

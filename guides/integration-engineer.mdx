@@ -1,7 +1,7 @@
 ---
-title: "Integration Engineer Setup Guide for N-Gate"
+title: "N-Gate Integration Engineer: Gateways, Routes & Proxies"
 sidebarTitle: "Integration Setup"
-description: "Register gateways, create consumers, define proxy routes, and test end-to-end proxied requests as an N-Gate integration engineer."
+description: "Register upstream gateways, add API consumers, create proxy routes, and verify end-to-end request flow through N-Gate as an integration engineer."
 ---
 
 As an Integration Engineer, your job is to wire upstream services into N-Gate so that consumers can reach them through a unified, governed interface. This guide takes you from a fresh login all the way through registering a gateway, creating consumers, defining routes, and firing a live proxied request — with a troubleshooting section to help you resolve the issues that come up most often in the field.
@@ -17,7 +17,7 @@ As an Integration Engineer, your job is to wire upstream services into N-Gate so
     A workspace must already exist. Ask your Tenant Admin to create one or follow the [Tenant Administration Guide](/guides/tenant-admin).
   </Card>
   <Card title="Target Service URL" icon="globe">
-    The base URL of the upstream service you want to proxy through N-Gate (e.g., `https://payments.internal.example.com`).
+    The base URL of the upstream service you want to proxy through N-Gate (e.g., `https://payments-api.example.com`).
   </Card>
   <Card title="Editor or Admin Role" icon="shield-check">
     Your account needs at least `gateways:write` and `routes:write` permissions in the target workspace.
@@ -85,7 +85,7 @@ As an Integration Engineer, your job is to wire upstream services into N-Gate so
       --header 'Content-Type: application/json' \
       --data '{
         "name": "Payments Service Gateway",
-        "url": "https://payments.internal.example.com",
+        "url": "https://payments-api.example.com",
         "workspaceId": "ws_01HX9ABCDE2FGHIJ"
       }'
     ```
@@ -94,7 +94,7 @@ As an Integration Engineer, your job is to wire upstream services into N-Gate so
     {
       "id": "gw_02KYPQRST3UVWXYZ",
       "name": "Payments Service Gateway",
-      "url": "https://payments.internal.example.com",
+      "url": "https://payments-api.example.com",
       "workspaceId": "ws_01HX9ABCDE2FGHIJ",
       "createdAt": "2025-01-15T10:00:00Z"
     }
@@ -183,7 +183,7 @@ As an Integration Engineer, your job is to wire upstream services into N-Gate so
       --header 'Content-Type: application/json' \
       --data '{
         "path": "/payments/charge",
-        "target": "https://payments.internal.example.com/v1/charge",
+        "target": "https://payments-api.example.com/v1/charge",
         "method": "POST",
         "workspaceId": "ws_01HX9ABCDE2FGHIJ"
       }'
@@ -196,7 +196,7 @@ As an Integration Engineer, your job is to wire upstream services into N-Gate so
       --header 'Content-Type: application/json' \
       --data '{
         "path": "/payments/status",
-        "target": "https://payments.internal.example.com/v1/status",
+        "target": "https://payments-api.example.com/v1/status",
         "method": "GET",
         "workspaceId": "ws_01HX9ABCDE2FGHIJ"
       }'
@@ -206,7 +206,7 @@ As an Integration Engineer, your job is to wire upstream services into N-Gate so
     {
       "id": "rt_04MNOPQR5STUVWX",
       "path": "/payments/charge",
-      "target": "https://payments.internal.example.com/v1/charge",
+      "target": "https://payments-api.example.com/v1/charge",
       "method": "POST",
       "workspaceId": "ws_01HX9ABCDE2FGHIJ",
       "createdAt": "2025-01-15T10:20:00Z"

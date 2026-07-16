@@ -1,10 +1,10 @@
 ---
-title: "Airtime Transactions API — List and Monitor Telecom Transactions"
+title: "Airtime Transactions API — Query and Monitor Top-Ups"
 sidebarTitle: "Airtime"
 description: "Query airtime top-up transactions by status, provider, date range, and workspace. Retrieve individual transaction records and failure details."
 ---
 
-The Airtime Transactions API gives you read access to every airtime top-up event processed through N-Gate's telecom integration layer. Transactions are created when a downstream service initiates an airtime disbursement and move through `pending → completed | failed` as the upstream provider confirms or rejects the transfer. You can filter the list endpoint by provider, date window, and status to build dashboards, reconcile records, or trigger downstream workflows when a transaction settles.
+The Airtime Transactions API gives you read access to every airtime top-up event processed through N-Gate's telecom integration layer. Transactions are created when a downstream service initiates an airtime disbursement and move through `pending → completed | failed` as the upstream provider confirms or rejects the transfer. You can filter the list endpoint by provider, date window, and status to build dashboards, reconcile records, or trigger downstream workflows when a transaction settles. All requests require an `Authorization: Bearer <token>` header.
 
 ---
 

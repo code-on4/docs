@@ -1,16 +1,16 @@
 ---
-title: "Authenticate and Get a Bearer Token for N-Gate"
+title: "N-Gate API Authentication: Get and Use Bearer Tokens"
 sidebarTitle: "Authentication"
 description: "Log in with your email and password to receive a Bearer token, then attach it to every N-Gate API request via the Authorization header."
 ---
 
-Authentication in N-Gate uses a token-based flow: you call `POST /auth/login` with your email and password, receive a short-lived JWT Bearer token in the response, and include that token in the `Authorization` header of every subsequent request. This page covers the full login endpoint reference, how to attach the token, what happens when it expires, and how to re-authenticate smoothly.
+Authentication in N-Gate uses a token-based flow: you call `POST /auth/login` with your email and password, receive a short-lived Bearer token in the response, and include that token in the `Authorization` header of every subsequent request. This page covers the full login endpoint reference, how to attach the token, what happens when it expires, and how to re-authenticate smoothly.
 
 ## POST /auth/login
 
-The login endpoint is the only N-Gate API endpoint that does **not** require an existing Bearer token. It accepts your credentials as a JSON body and returns a signed JWT along with basic user information and an expiry timestamp.
+The login endpoint is the only N-Gate API endpoint that does **not** require an existing Bearer token. It accepts your credentials as a JSON body and returns a Bearer token along with basic user information and an expiry timestamp.
 
-```
+```text
 POST https://api.n-gate.io/auth/login
 ```
 
@@ -33,7 +33,7 @@ POST https://api.n-gate.io/auth/login
 A `200 OK` response returns the following top-level fields:
 
 <ResponseField name="token" type="string" required>
-  A signed JWT Bearer token. Include this value in the `Authorization: Bearer <token>` header of every subsequent request.
+  A Bearer token. Include this value in the `Authorization: Bearer <token>` header of every subsequent request.
 </ResponseField>
 
 <ResponseField name="user" type="object" required>

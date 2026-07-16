@@ -1,10 +1,12 @@
 ---
 title: "Permissions API — Control Workspace Access Roles"
 sidebarTitle: "Permissions"
-description: "List, update, and remove role assignments within an N-Gate workspace to enforce fine-grained member access control."
+description: "List, update, and remove workspace role assignments in N-Gate. Manage fine-grained member access control across all workspace members."
 ---
 
 Permissions in N-Gate represent the binding between a workspace member and a role. Each permission record ties a specific user (`userId`) to a role (`roleId`) within a workspace, governing what actions that user may perform. The Permissions API lets workspace owners and admins inspect current role assignments, promote or demote members by swapping their role, and revoke access entirely by deleting a permission.
+
+All Permissions API endpoints require an `Authorization: Bearer <token>` header. Requests without a valid token receive a `401 Unauthorized` response.
 
 ---
 
@@ -54,9 +56,8 @@ Returns an array of permission objects.
 
 <CodeGroup>
 ```bash cURL
-curl --request GET \
-  --url "https://api.n-gate.io/api/workspaces/ws_01hx9zt3m5kbf2qp/permissions" \
-  --header "Authorization: Bearer <token>"
+curl -X GET "https://api.n-gate.io/api/workspaces/ws_01hx9zt3m5kbf2qp/permissions" \
+  -H "Authorization: Bearer $TOKEN"
 ```
 
 ```json Response
@@ -135,11 +136,10 @@ Updates the role assigned to an existing workspace member. Use this to promote a
 
 <CodeGroup>
 ```bash cURL
-curl --request PUT \
-  --url "https://api.n-gate.io/api/workspaces/ws_01hx9zt3m5kbf2qp/permissions" \
-  --header "Authorization: Bearer <token>" \
-  --header "Content-Type: application/json" \
-  --data '{
+curl -X PUT "https://api.n-gate.io/api/workspaces/ws_01hx9zt3m5kbf2qp/permissions" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
     "permissionId": "perm_01hxajk7p9mdf3st",
     "roleId": "role_admin"
   }'
@@ -190,9 +190,8 @@ Permanently removes a permission assignment, revoking the associated user's acce
 
 <CodeGroup>
 ```bash cURL
-curl --request DELETE \
-  --url "https://api.n-gate.io/api/workspaces/ws_01hx9zt3m5kbf2qp/permissions/perm_01hxajk7p9mdf3st" \
-  --header "Authorization: Bearer <token>"
+curl -X DELETE "https://api.n-gate.io/api/workspaces/ws_01hx9zt3m5kbf2qp/permissions/perm_01hxajk7p9mdf3st" \
+  -H "Authorization: Bearer $TOKEN"
 ```
 
 ```json Response

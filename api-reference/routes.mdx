@@ -6,6 +6,8 @@ description: "Register, list, and delete proxy routes in N-Gate. Routes map an i
 
 Routes are the core routing configuration of N-Gate. Each route defines an inbound path, an HTTP method, and an upstream target URL — together forming the rule that tells N-Gate how to proxy a given request to the correct backend service. Routes are always scoped to a workspace, letting different teams manage their own upstream mappings without interference. Use this API to register new routes, browse existing ones, and clean up routes that are no longer in use.
 
+All Routes API endpoints require an `Authorization: Bearer <token>` header. Requests without a valid token receive a `401 Unauthorized` response.
+
 ---
 
 ## List Routes
@@ -42,7 +44,7 @@ Returns a paginated list of routes. You can optionally filter by workspace to na
       The inbound path this route matches (e.g. `/payments/charge`).
     </ResponseField>
     <ResponseField name="target" type="string">
-      The upstream URL requests are forwarded to (e.g. `https://payments.internal/charge`).
+      The upstream URL requests are forwarded to (e.g. `https://api.example.com/charge`).
     </ResponseField>
     <ResponseField name="method" type="string">
       The HTTP method this route accepts (e.g. `GET`, `POST`, `PUT`).
@@ -75,9 +77,8 @@ Returns a paginated list of routes. You can optionally filter by workspace to na
 
 <CodeGroup>
 ```bash cURL
-curl --request GET \
-  --url "https://api.n-gate.io/api/routes?workspaceId=ws_01hx9zt3m5kbf2qp&page=1&limit=20" \
-  --header "Authorization: Bearer <token>"
+curl -X GET "https://api.n-gate.io/api/routes?workspaceId=ws_01hx9zt3m5kbf2qp&page=1&limit=20" \
+  -H "Authorization: Bearer $TOKEN"
 ```
 
 ```json Response
@@ -86,7 +87,7 @@ curl --request GET \
     {
       "id": "route_01hxcmk3m5kbf2ra",
       "path": "/payments/charge",
-      "target": "https://payments.internal/charge",
+      "target": "https://api.example.com/payments/charge",
       "method": "POST",
       "workspaceId": "ws_01hx9zt3m5kbf2qp",
       "createdAt": "2024-05-10T08:00:00Z"
@@ -94,7 +95,7 @@ curl --request GET \
     {
       "id": "route_01hxcmk9r7ncd4sb",
       "path": "/users/profile",
-      "target": "https://users.internal/profile",
+      "target": "https://api.example.com/users/profile",
       "method": "GET",
       "workspaceId": "ws_01hx9zt3m5kbf2qp",
       "createdAt": "2024-05-12T09:30:00Z"
@@ -126,7 +127,7 @@ Registers a new proxy route. Once created, the route can be invoked via the [Pro
 </ParamField>
 
 <ParamField body="target" type="string" required>
-  The full upstream URL to forward matching requests to. Must be a valid, absolute URL including the scheme (e.g. `https://payments.internal/charge`).
+  The full upstream URL to forward matching requests to. Must be a valid, absolute URL including the scheme (e.g. `https://api.example.com/payments/charge`).
 </ParamField>
 
 <ParamField body="method" type="string" required>
@@ -171,13 +172,12 @@ Registers a new proxy route. Once created, the route can be invoked via the [Pro
 
 <CodeGroup>
 ```bash cURL
-curl --request POST \
-  --url "https://api.n-gate.io/api/routes" \
-  --header "Authorization: Bearer <token>" \
-  --header "Content-Type: application/json" \
-  --data '{
+curl -X POST "https://api.n-gate.io/api/routes" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
     "path": "/payments/charge",
-    "target": "https://payments.internal/charge",
+    "target": "https://api.example.com/payments/charge",
     "method": "POST",
     "workspaceId": "ws_01hx9zt3m5kbf2qp"
   }'
@@ -187,7 +187,7 @@ curl --request POST \
 {
   "id": "route_01hxcmk3m5kbf2ra",
   "path": "/payments/charge",
-  "target": "https://payments.internal/charge",
+  "target": "https://api.example.com/payments/charge",
   "method": "POST",
   "workspaceId": "ws_01hx9zt3m5kbf2qp",
   "createdAt": "2024-05-10T08:00:00Z"
@@ -225,9 +225,8 @@ Permanently removes a route. Any subsequent Proxy API calls referencing the dele
 
 <CodeGroup>
 ```bash cURL
-curl --request DELETE \
-  --url "https://api.n-gate.io/api/routes/route_01hxcmk3m5kbf2ra" \
-  --header "Authorization: Bearer <token>"
+curl -X DELETE "https://api.n-gate.io/api/routes/route_01hxcmk3m5kbf2ra" \
+  -H "Authorization: Bearer $TOKEN"
 ```
 
 ```json Response

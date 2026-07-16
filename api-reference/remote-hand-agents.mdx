@@ -4,7 +4,7 @@ sidebarTitle: "Remote Agents"
 description: "Register physical or virtual remote hand agents, list agents by status and type, and update agent metadata, location, and operational state."
 ---
 
-Remote hand agents are the managed execution units in N-Gate's infrastructure layer. A *physical* agent represents a hardware device or on-site technician terminal that can perform real-world actions such as cable management or equipment reboots. A *virtual* agent is a software-defined process that executes automated tasks in a cloud or on-premises environment. Both types share the same API surface and lifecycle, and each agent can spawn multiple concurrent runtime instances tracked through the [Agent Instances API](/api-reference/agent-instances).
+Remote hand agents are the managed execution units in N-Gate's infrastructure layer. A *physical* agent represents a hardware device or on-site technician terminal that can perform real-world actions such as cable management or equipment reboots. A *virtual* agent is a software-defined process that executes automated tasks in a cloud or on-premises environment. Both types share the same API surface and lifecycle, and each agent can spawn multiple concurrent runtime instances tracked through the [Agent Instances API](/api-reference/agent-instances). All requests require an `Authorization: Bearer <token>` header.
 
 ---
 

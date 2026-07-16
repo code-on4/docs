@@ -1,10 +1,10 @@
 ---
-title: "Gateway Consumers API — Authorize API Consumers"
+title: "Gateway Consumers API — Manage Authorized API Clients"
 sidebarTitle: "Consumers"
-description: "Create, list, and remove gateway consumers that represent authorized API clients scoped to a specific gateway and workspace."
+description: "Create, list, and remove gateway consumers — the authorized API clients that are scoped to a specific gateway and workspace in N-Gate."
 ---
 
-A gateway consumer represents an authorized client — such as a partner system, internal service, or third-party application — that is permitted to send requests through a specific N-Gate gateway. Consumers carry their own identity and are the unit against which rate limits, authentication policies, and access controls are applied. Every consumer is scoped to both a gateway and a workspace, giving you fine-grained control over which clients can reach which upstream services.
+A gateway consumer represents an authorized client — such as a partner system, internal service, or third-party application — that is permitted to send requests through a specific N-Gate gateway. Consumers carry their own identity and are the unit against which rate limits, authentication policies, and access controls are applied. Every consumer is scoped to both a gateway and a workspace, giving you fine-grained control over which clients can reach which upstream services. All requests to the Gateway Consumers API must include an `Authorization: Bearer <token>` header.
 
 ---
 

@@ -1,10 +1,12 @@
 ---
-title: "System Administration: Config & SSL Management"
+title: "System Administration: Config & SSL Certificate Management"
 sidebarTitle: "System Admin"
 description: "Manage platform-level configuration uploads and SSL/TLS certificate regeneration using N-Gate's privileged system administration endpoints."
 ---
 
 N-Gate's system administration endpoints give privileged operators direct control over platform-level settings — from uploading new configuration files to regenerating SSL/TLS certificates. These operations affect the entire platform and are intentionally restricted to workspace administrators with system-level permissions. Before invoking any endpoint in this section, confirm that you have the required role and that your change is scheduled to minimise impact on running workloads.
+
+All endpoints in this section require `Authorization: Bearer <token>` and a workspace admin role with system-level permissions.
 
 <Warning>
   System administration endpoints are **restricted to workspace admins with system-level permissions**. Unauthorised calls will return `403 Forbidden`. Misuse of these endpoints can affect platform availability for all users in your workspace.
@@ -18,12 +20,16 @@ Upload a new configuration file to update platform settings or apply environment
 
 **`POST /api/system/config`**
 
-The request body must be sent as `multipart/form-data` with the configuration file attached.
+The request body must be sent as `multipart/form-data` with the configuration file and an optional description attached.
 
 ### Request Parameters
 
-<ParamField body="config" type="file" required>
+<ParamField body="configFile" type="file" required>
   The configuration file to upload. Accepted formats depend on your platform deployment (e.g. `.yaml`, `.json`, `.env`). Check with your platform operator for supported formats.
+</ParamField>
+
+<ParamField body="description" type="string">
+  A short human-readable description of the change (e.g. `"Increase rate limits for Q2 traffic spike"`). Stored alongside the configuration snapshot for audit purposes.
 </ParamField>
 
 ### Steps to Upload a Configuration File
@@ -39,7 +45,8 @@ The request body must be sent as `multipart/form-data` with the configuration fi
     ```bash
     curl -X POST "https://api.n-gate.io/api/system/config" \
       -H "Authorization: Bearer <token>" \
-      -F "config=@/path/to/platform-config.yaml"
+      -F "configFile=@/path/to/platform-config.yaml" \
+      -F "description=Increase rate limits for Q2 traffic spike"
     ```
   </Step>
   <Step title="Confirm the applied configuration">
@@ -51,7 +58,7 @@ The request body must be sent as `multipart/form-data` with the configuration fi
       "configId": "cfg_abc",
       "appliedAt": "2024-01-15T10:00:00Z"
     }
-  ```
+    ```
   </Step>
 </Steps>
 
@@ -80,7 +87,7 @@ The request body must be sent as `multipart/form-data` with the configuration fi
     Push updated rate limits, feature flags, or integration credentials to the platform without a full redeployment.
   </Card>
   <Card title="Environment-Specific Configuration" icon="layer-group">
-    Apply staging or production configuration profiles as part of a CI/CD promotion pipeline, keeping environments consistent and auditable.
+    Apply staging or production configuration profiles as part of a promotion pipeline, keeping environments consistent and auditable.
   </Card>
 </CardGroup>
 
@@ -88,15 +95,23 @@ The request body must be sent as `multipart/form-data` with the configuration fi
 
 ## SSL/TLS Certificate Regeneration
 
-Trigger an on-demand regeneration of the platform's SSL/TLS certificate. N-Gate will provision a new certificate for `api.n-gate.io` and replace the existing one.
+Trigger an on-demand regeneration of the platform's SSL/TLS certificate. N-Gate will provision a new certificate for the specified domain and replace the existing one.
 
 **`POST /api/system/ssl/regenerate`**
 
-This endpoint accepts no request body.
-
 <Warning>
-  **SSL regeneration causes a brief service interruption.** Active connections may be dropped during the certificate swap. Always schedule regeneration during a planned maintenance window and notify users in advance.
+  **SSL regeneration causes a brief service interruption.** Active connections will be dropped during the certificate swap. Always schedule regeneration during a planned maintenance window and notify all API consumers in advance before triggering this endpoint.
 </Warning>
+
+### Request Body
+
+<ParamField body="domain" type="string">
+  The domain to issue the certificate for (e.g. `api.n-gate.io`). Defaults to the platform's primary domain if omitted.
+</ParamField>
+
+<ParamField body="reason" type="string">
+  A short description of why regeneration is being triggered (e.g. `"Annual renewal"` or `"Key compromise — emergency rotation"`). Stored in the audit log.
+</ParamField>
 
 ### When to Regenerate
 
@@ -124,7 +139,12 @@ This endpoint accepts no request body.
   <Step title="Trigger regeneration">
     ```bash
     curl -X POST "https://api.n-gate.io/api/system/ssl/regenerate" \
-      -H "Authorization: Bearer <token>"
+      -H "Authorization: Bearer <token>" \
+      -H "Content-Type: application/json" \
+      -d '{
+        "domain": "api.n-gate.io",
+        "reason": "Annual renewal"
+      }'
     ```
   </Step>
   <Step title="Confirm the new certificate">
@@ -139,7 +159,7 @@ This endpoint accepts no request body.
     ```
   </Step>
   <Step title="Validate connectivity">
-    After regeneration completes, run a TLS handshake check against `api.n-gate.io` to confirm the new certificate is being served correctly before closing the maintenance window.
+    After regeneration completes, run a TLS handshake check against your domain to confirm the new certificate is being served correctly before closing the maintenance window.
 
     ```bash
     curl -vI https://api.n-gate.io 2>&1 | grep -E "SSL|expire|subject"
@@ -171,12 +191,12 @@ This endpoint accepts no request body.
 
 Both system administration endpoints enforce the same access requirements:
 
-| Requirement              | Detail                                                         |
-|--------------------------|----------------------------------------------------------------|
-| **Authentication**       | `Authorization: Bearer <token>` header on every request        |
-| **Role**                 | Workspace admin with system-level permissions                  |
-| **Scope**                | Operations apply platform-wide within your workspace           |
-| **Audit**                | All calls are logged; `configId` and certificate metadata are returned for traceability |
+| Requirement          | Detail                                                                       |
+|----------------------|------------------------------------------------------------------------------|
+| **Authentication**   | `Authorization: Bearer <token>` header on every request                      |
+| **Role**             | Workspace admin with system-level permissions                                |
+| **Scope**            | Operations apply platform-wide within your workspace                         |
+| **Audit**            | All calls are logged; `configId` and certificate metadata are returned for traceability |
 
 <Warning>
   Never share your admin bearer token in client-side code, public repositories, or logs. Rotate the token immediately if you believe it has been exposed.

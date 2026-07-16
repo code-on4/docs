@@ -1,10 +1,12 @@
 ---
 title: "Invitations API — Manage Workspace Member Invites"
 sidebarTitle: "Invitations"
-description: "Invite users to an N-Gate workspace by email, list outstanding invitations, and cancel pending invites before they are accepted."
+description: "Invite new members to an N-Gate workspace by email, review all outstanding invitations, and cancel pending invites before they are accepted."
 ---
 
 The Invitations API provides a controlled onboarding flow for adding new members to a workspace. Rather than granting access directly, you send an invitation to a user's email address alongside the role they will receive upon acceptance. Invitations remain in a `pending` state until the recipient accepts or until you explicitly cancel them. Workspace owners and admins can inspect all outstanding invitations and revoke any that are no longer needed.
+
+All Invitations API endpoints require an `Authorization: Bearer <token>` header. Requests without a valid token receive a `401 Unauthorized` response.
 
 ---
 
@@ -66,11 +68,10 @@ Sends an invitation email to a user, granting them access to the workspace with 
 
 <CodeGroup>
 ```bash cURL
-curl --request POST \
-  --url "https://api.n-gate.io/api/workspaces/ws_01hx9zt3m5kbf2qp/invite" \
-  --header "Authorization: Bearer <token>" \
-  --header "Content-Type: application/json" \
-  --data '{
+curl -X POST "https://api.n-gate.io/api/workspaces/ws_01hx9zt3m5kbf2qp/invite" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
     "email": "jane.doe@example.com",
     "roleId": "role_admin"
   }'
@@ -136,9 +137,8 @@ Returns an array of invitation objects.
 
 <CodeGroup>
 ```bash cURL
-curl --request GET \
-  --url "https://api.n-gate.io/api/workspaces/ws_01hx9zt3m5kbf2qp/invitations" \
-  --header "Authorization: Bearer <token>"
+curl -X GET "https://api.n-gate.io/api/workspaces/ws_01hx9zt3m5kbf2qp/invitations" \
+  -H "Authorization: Bearer $TOKEN"
 ```
 
 ```json Response
@@ -195,9 +195,8 @@ Cancels a pending invitation, preventing the recipient from using the invitation
 
 <CodeGroup>
 ```bash cURL
-curl --request DELETE \
-  --url "https://api.n-gate.io/api/workspaces/ws_01hx9zt3m5kbf2qp/invitations/inv_01hxbpk3m5kbf2qz" \
-  --header "Authorization: Bearer <token>"
+curl -X DELETE "https://api.n-gate.io/api/workspaces/ws_01hx9zt3m5kbf2qp/invitations/inv_01hxbpk3m5kbf2qz" \
+  -H "Authorization: Bearer $TOKEN"
 ```
 
 ```json Response

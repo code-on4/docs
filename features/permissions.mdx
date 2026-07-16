@@ -1,7 +1,7 @@
 ---
-title: "Workspace Permissions & Roles in N-Gate"
+title: "Managing Workspace Permissions and Roles in N-Gate"
 sidebarTitle: "Permissions"
-description: "Control who can do what in your N-Gate workspace by assigning roles to members and auditing access with the permissions API."
+description: "Assign, update, and revoke workspace roles in N-Gate to control which members can read, write, or administer your API gateway resources."
 ---
 
 Every N-Gate workspace has a built-in access-control layer that maps each member to a **role**. Roles determine which API operations a user may perform — from read-only inspection to full administrative control. By assigning the most restrictive role that still lets someone do their job, you reduce the blast radius of credential leaks and misconfiguration.
@@ -130,6 +130,47 @@ curl -X PUT "https://api.n-gate.io/api/workspaces/ws_123/permissions" \
 
 ---
 
+## Delete a permission
+
+Permanently remove a member's role assignment from the workspace. The member will lose all access associated with that role immediately.
+
+### Endpoint
+
+```
+DELETE /api/workspaces/:workspaceId/permissions/:permissionId
+```
+
+### Request
+
+<ParamField path="workspaceId" type="string" required>
+  The ID of the workspace from which you want to remove the permission.
+</ParamField>
+
+<ParamField path="permissionId" type="string" required>
+  The ID of the permission record to delete.
+</ParamField>
+
+<ParamField header="Authorization" type="string" required>
+  Bearer token for authenticating the request. Format: `Bearer <token>`.
+</ParamField>
+
+### Example
+
+```bash
+curl -X DELETE "https://api.n-gate.io/api/workspaces/ws_123/permissions/perm_abc" \
+  -H "Authorization: Bearer <token>"
+```
+
+### Response
+
+A successful deletion returns an HTTP `204 No Content` response with no body.
+
+<Warning>
+  Deleting a permission is irreversible. The affected member will immediately lose access to the workspace. If you need to change their role rather than remove it entirely, use the update endpoint instead.
+</Warning>
+
+---
+
 ## Permissions workflow
 
 <Steps>
@@ -137,13 +178,13 @@ curl -X PUT "https://api.n-gate.io/api/workspaces/ws_123/permissions" \
     Call `GET /api/workspaces/:workspaceId/permissions` to capture a snapshot of existing role assignments.
   </Step>
   <Step title="Identify the permission record">
-    Locate the `permissionId` for the member whose role you want to change.
+    Locate the `permissionId` for the member whose role you want to change or remove.
   </Step>
-  <Step title="Update the role">
-    Call `PUT /api/workspaces/:workspaceId/permissions` with the `permissionId` and the desired `roleId`.
+  <Step title="Update or delete the role">
+    To change a role, call `PUT /api/workspaces/:workspaceId/permissions` with the `permissionId` and the desired `roleId`. To revoke access entirely, call `DELETE /api/workspaces/:workspaceId/permissions/:permissionId`.
   </Step>
   <Step title="Verify the change">
-    Re-run the list call and confirm the `roleId` reflects your update.
+    Re-run the list call and confirm the member's `roleId` reflects your update, or that their record no longer appears after deletion.
   </Step>
 </Steps>
 
@@ -162,6 +203,6 @@ curl -X PUT "https://api.n-gate.io/api/workspaces/ws_123/permissions" \
     Create dedicated user accounts for CI/CD pipelines or scripts and assign them `role_operator`. This keeps automated changes traceable and separate from human activity in your audit logs.
   </Accordion>
   <Accordion title="Rotate tokens alongside role changes">
-    When you demote a member, also rotate or revoke the Bearer token they were using. A demoted user retaining a valid token can still authenticate, but their API calls will be rejected based on the new role.
+    When you demote or delete a member, also rotate or revoke the Bearer token they were using. A removed user retaining a valid token can still attempt to authenticate, but their API calls will be rejected based on the updated permission state.
   </Accordion>
 </AccordionGroup>

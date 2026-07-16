@@ -198,13 +198,17 @@ curl -X GET "https://api.n-gate.io/api/mandates/mandate_abc" \
     ```
   </Tab>
   <Tab title="Still pending">
-    If a mandate remains in `pending` longer than expected, verify the document uploaded correctly by checking the `documentUrl` field. Contact your workspace administrator if the mandate is stuck.
+    If a mandate remains in `pending` longer than expected, the document may still be under review. Re-fetch the mandate to confirm the `status` field and contact your workspace administrator if the mandate appears stuck.
 
     ```bash
     curl -X GET "https://api.n-gate.io/api/mandates/mandate_abc" \
       -H "Authorization: Bearer <token>"
-    # "status": "pending" — check documentUrl is populated
+    # "status": "pending" — review is in progress; check back later
     ```
+
+    <Note>
+      The `documentUrl` field is only populated once the mandate has been processed. A `pending` mandate may not yet have a `documentUrl` — this is expected behavior, not an error.
+    </Note>
   </Tab>
 </Tabs>
 

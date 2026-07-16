@@ -4,7 +4,7 @@ sidebarTitle: "Agent Instances"
 description: "Start, list, and stop runtime instances of a remote hand agent. Each instance represents one active execution session on a registered agent."
 ---
 
-An *agent* is the registered unit — the hardware device, the virtual process blueprint, or the on-site terminal — while an *instance* is a single active execution session running on top of that agent. The relationship is analogous to a class and its objects: one agent can run many concurrent instances, each with its own lifecycle, start time, and metadata. You use the Agent Instances API to start new execution sessions, inspect running and historical instances, and cleanly stop sessions when work is complete. All instance routes are nested under `/api/remote-hand-agent/:agentId/`, so you always operate in the context of a specific parent agent.
+An *agent* is the registered unit — the hardware device, the virtual process blueprint, or the on-site terminal — while an *instance* is a single active execution session running on top of that agent. The relationship is analogous to a class and its objects: one agent can run many concurrent instances, each with its own lifecycle, start time, and metadata. You use the Agent Instances API to start new execution sessions, inspect running and historical instances, and cleanly stop sessions when work is complete. All instance routes are nested under `/api/remote-hand-agent/:agentId/`, so you always operate in the context of a specific parent agent. All requests require an `Authorization: Bearer <token>` header.
 
 ---
 

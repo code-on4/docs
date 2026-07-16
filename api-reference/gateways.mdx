@@ -1,7 +1,7 @@
 ---
 title: "Gateways API — Register and Manage Upstream Gateways"
 sidebarTitle: "Gateways"
-description: "Register upstream gateways, list all configured gateways in a workspace, and remove gateways that are no longer needed."
+description: "Register upstream gateways, list all configured gateways across your workspaces, and permanently remove gateways that are no longer in use."
 ---
 
 Gateways are the core routing unit in N-Gate. Each gateway represents an upstream base URL that N-Gate proxies traffic to on behalf of your consumers. You register a gateway once per upstream service, then attach consumers, policies, and routes to it. All gateway operations are scoped to a workspace, and every mutating request requires a valid Bearer token with at least gateway-write permissions.

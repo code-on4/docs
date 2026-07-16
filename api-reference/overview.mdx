@@ -1,5 +1,5 @@
 ---
-title: "N-Gate REST API Reference Overview"
+title: "N-Gate REST API Reference: Endpoints, Auth & Errors"
 sidebarTitle: "Overview"
 description: "Explore the N-Gate REST API: base URL, authentication, request and response formats, error codes, rate limiting, and endpoint groups."
 ---
@@ -10,7 +10,7 @@ The N-Gate REST API gives you programmatic access to every capability of the N-G
 
 Every API request targets the following base URL:
 
-```
+```text
 https://api.n-gate.io
 ```
 
@@ -137,6 +137,7 @@ When a request cannot be fulfilled, N-Gate returns a structured error object so 
 | `422` | Unprocessable Entity | The request is well-formed but fails validation (e.g., a required field is missing). |
 | `429` | Too Many Requests | You have exceeded the rate limit. See the `Retry-After` header. |
 | `500` | Internal Server Error | An unexpected condition occurred on the server. |
+| `502` | Bad Gateway | N-Gate received an invalid response from an upstream service. Retry after a short delay. |
 
 <Warning>
   A `403 Forbidden` response means your token is valid but your role or workspace permissions are insufficient. Check with your workspace administrator to ensure the correct permissions have been granted.

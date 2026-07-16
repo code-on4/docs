@@ -1,7 +1,7 @@
 ---
-title: "API Routing & Proxying in N-Gate Explained"
+title: "API Routing and Proxying in N-Gate: A Complete Guide"
 sidebarTitle: "Routing"
-description: "Understand how N-Gate routes define dynamic endpoints and proxy requests securely to your backend services with auth enforcement."
+description: "Understand how N-Gate routes define API endpoints and proxy requests to your backend services with Bearer auth enforcement and per-workspace isolation."
 ---
 
 N-Gate sits between your API clients and your backend services as an intelligent reverse proxy layer. Instead of exposing your internal services directly to the outside world, you define **Routes** inside N-Gate that describe which paths and HTTP methods should be accepted, and where each matching request should be forwarded. This lets you centralize authentication, authorization, and traffic control in one place — without touching your backend code.
@@ -13,7 +13,7 @@ Every incoming request to N-Gate travels through a two-stage pipeline:
 1. **Route matching** — N-Gate inspects the request's path and HTTP method, then looks for a matching route definition in your workspace.
 2. **Proxying** — If a match is found (and the caller is authorized), N-Gate forwards the request to the route's configured target URL and streams the response back to the client.
 
-```
+```text
 Client Request
       │
       ▼
@@ -34,7 +34,7 @@ Client Request
 ```
 
 <Note>
-  Route definitions are scoped to a workspace. The same path can exist in multiple workspaces without conflict — N-Gate resolves the correct route using the workspace context of the authenticated caller.
+  Route definitions are scoped to a workspace. The same path can exist in multiple workspaces without conflict — N-Gate resolves the correct route using the workspace context of the authenticated caller. All route endpoints require a valid `Authorization: Bearer <token>` header.
 </Note>
 
 ---
@@ -73,24 +73,23 @@ You manage route definitions through the `/api/routes` endpoint.
   <Tab title="Create a Route">
     <Steps>
       <Step title="Define your route payload">
-        Specify the path, HTTP method, and the backend target URL you want N-Gate to proxy to.
+        Specify the path, HTTP method, and the backend target URL you want N-Gate to proxy to. Include your Bearer token in the `Authorization` header.
 
-        ```http
-        POST https://api.n-gate.io/api/routes
-        Authorization: Bearer <token>
-        Content-Type: application/json
-
-        {
-          "workspaceId": "wsp_abc123",
-          "path": "/payments/v1/charge",
-          "method": "POST",
-          "targetUrl": "https://internal-payments.corp.local/charge",
-          "requiresAuth": true
-        }
+        ```bash curl
+        curl -X POST https://api.n-gate.io/api/routes \
+          -H "Authorization: Bearer <token>" \
+          -H "Content-Type: application/json" \
+          -d '{
+            "workspaceId": "wsp_abc123",
+            "path": "/payments/v1/charge",
+            "method": "POST",
+            "targetUrl": "https://payments.example.com/charge",
+            "requiresAuth": true
+          }'
         ```
       </Step>
       <Step title="Receive the route record">
-        N-Gate responds with the created route object, including a unique `routeId` you can reference for updates or deletion.
+        N-Gate responds with the created route object, including a unique `routeId` you can reference for deletion.
 
         ```json
         {
@@ -98,7 +97,7 @@ You manage route definitions through the `/api/routes` endpoint.
           "workspaceId": "wsp_abc123",
           "path": "/payments/v1/charge",
           "method": "POST",
-          "targetUrl": "https://internal-payments.corp.local/charge",
+          "targetUrl": "https://payments.example.com/charge",
           "requiresAuth": true,
           "createdAt": "2024-01-15T11:00:00Z"
         }
@@ -111,11 +110,11 @@ You manage route definitions through the `/api/routes` endpoint.
   </Tab>
 
   <Tab title="List Routes">
-    Retrieve all route definitions in your workspace.
+    Retrieve all route definitions in your workspace. Bearer authentication is required.
 
-    ```http
-    GET https://api.n-gate.io/api/routes?workspaceId=wsp_abc123
-    Authorization: Bearer <token>
+    ```bash curl
+    curl -X GET "https://api.n-gate.io/api/routes?workspaceId=wsp_abc123" \
+      -H "Authorization: Bearer <token>"
     ```
 
     The response returns a paginated array of route objects. Use the `path` and `method` fields to audit your routing table and spot any unintended overlaps.
@@ -125,34 +124,19 @@ You manage route definitions through the `/api/routes` endpoint.
     </Tip>
   </Tab>
 
-  <Tab title="Update a Route">
-    Modify an existing route using its `routeId`. You can change the target URL, method filter, or auth requirements at any time — updates take effect immediately.
-
-    ```http
-    PATCH https://api.n-gate.io/api/routes/{routeId}
-    Authorization: Bearer <token>
-    Content-Type: application/json
-
-    {
-      "targetUrl": "https://payments-v2.corp.local/charge",
-      "requiresAuth": true
-    }
-    ```
-
-    <Warning>
-      Changing a route's `path` or `method` while traffic is flowing may cause in-flight requests to fail. Plan route modifications during a low-traffic window or behind a feature flag.
-    </Warning>
-  </Tab>
-
   <Tab title="Delete a Route">
-    Remove a route permanently when the endpoint is no longer needed.
+    Remove a route permanently when the endpoint is no longer needed. Bearer authentication is required.
 
-    ```http
-    DELETE https://api.n-gate.io/api/routes/{routeId}
-    Authorization: Bearer <token>
+    ```bash curl
+    curl -X DELETE https://api.n-gate.io/api/routes/{routeId} \
+      -H "Authorization: Bearer <token>"
     ```
 
     N-Gate stops accepting requests for the deleted path/method combination immediately. Any clients still sending traffic to that route will receive a `404 Not Found` response.
+
+    <Warning>
+      Route deletion is permanent and takes effect immediately. Ensure no active clients depend on the route before removing it, or coordinate a migration window with downstream consumers.
+    </Warning>
   </Tab>
 </Tabs>
 
@@ -160,29 +144,28 @@ You manage route definitions through the `/api/routes` endpoint.
 
 ## Proxying Requests
 
-Once a route is defined, clients send their actual API calls to N-Gate's proxy endpoint at `/api/routes/proxy`. N-Gate matches the request to the correct route, enforces security policies, and forwards it to the target backend.
+Once a route is defined, clients send their actual API calls to N-Gate's proxy endpoint at `/api/routes/proxy`. N-Gate matches the request to the correct route, enforces security policies, and forwards it to the target backend. Bearer authentication is required on all proxy calls.
 
 <Steps>
   <Step title="Construct the proxy request">
-    Include the `routeId` (or path-based routing context) and your original request payload. N-Gate uses this to identify which route to apply.
+    Include the `routeId` and your original request payload. N-Gate uses this to identify which route to apply.
 
-    ```http
-    POST https://api.n-gate.io/api/routes/proxy
-    Authorization: Bearer <token>
-    Content-Type: application/json
-
-    {
-      "routeId": "rt_xyz789",
-      "method": "POST",
-      "body": {
-        "amount": 5000,
-        "currency": "USD",
-        "customerId": "cust_001"
-      },
-      "headers": {
-        "X-Request-ID": "req-abc-123"
-      }
-    }
+    ```bash curl
+    curl -X POST https://api.n-gate.io/api/routes/proxy \
+      -H "Authorization: Bearer <token>" \
+      -H "Content-Type: application/json" \
+      -d '{
+        "routeId": "rt_xyz789",
+        "method": "POST",
+        "body": {
+          "amount": 5000,
+          "currency": "USD",
+          "customerId": "cust_001"
+        },
+        "headers": {
+          "X-Request-ID": "req-abc-123"
+        }
+      }'
     ```
   </Step>
   <Step title="N-Gate enforces security">

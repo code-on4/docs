@@ -1,10 +1,10 @@
 ---
-title: "SSL Certificates API — Regenerate TLS Certificates Dynamically"
+title: "SSL Certificates API — Regenerate TLS Certificates"
 sidebarTitle: "SSL Certificates"
 description: "Trigger on-demand TLS certificate regeneration for your N-Gate domain. Returns the new certificate metadata including issuance and expiry timestamps."
 ---
 
-N-Gate manages TLS certificates for your gateway domains automatically, but there are scenarios — certificate compromise, domain migration, upcoming expiry, or compliance requirements — where you need to trigger an out-of-cycle regeneration programmatically. The SSL Certificates API provides a single endpoint to do exactly that. The regeneration process requests a new certificate from the configured certificate authority, installs it on the platform's TLS termination layer, and returns the new certificate metadata. Because this involves a live swap of the active certificate, there will be a brief interruption to TLS handshakes while the new certificate is installed.
+N-Gate manages TLS certificates for your gateway domains automatically, but there are scenarios — certificate compromise, domain migration, upcoming expiry, or compliance requirements — where you need to trigger an out-of-cycle regeneration programmatically. The SSL Certificates API provides a single endpoint to do exactly that. The regeneration process requests a new certificate from the configured certificate authority, installs it on the platform's TLS termination layer, and returns the new certificate metadata. Because this involves a live swap of the active certificate, there will be a brief interruption to TLS handshakes while the new certificate is installed. All requests require an `Authorization: Bearer <token>` header with system-level admin permissions.
 
 <Warning>
   Regenerating a certificate causes a **brief service interruption** — typically

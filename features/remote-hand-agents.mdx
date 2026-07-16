@@ -1,10 +1,12 @@
 ---
-title: "Remote Hand Agents: Register & Monitor Agents"
+title: "Remote Hand Agents: Register, Monitor & Manage Agents"
 sidebarTitle: "Remote Agents"
-description: "Register, configure, and monitor physical and virtual infrastructure agents from a unified N-Gate control plane."
+description: "Register, configure, and manage physical and virtual infrastructure agents — plus their runtime instances — from a unified N-Gate control plane."
 ---
 
-Remote Hand Agents are the bridge between N-Gate's control plane and your physical or virtual infrastructure. By registering an agent — whether it represents a server rack in a remote data center or a logical orchestration process in the cloud — you gain centralised visibility into its status, location, and runtime instances. N-Gate lets you register new agents, update their configuration, and track every agent in your workspace from a single API surface.
+Remote Hand Agents are the bridge between N-Gate's control plane and your physical or virtual infrastructure. By registering an agent — whether it represents a server rack in a remote data center or a logical orchestration process in the cloud — you gain centralised visibility into its status, location, and runtime instances. N-Gate lets you register new agents, update their configuration, and track every agent and its running instances from a single API surface.
+
+All endpoints in this section are protected. Include `Authorization: Bearer <token>` in every request.
 
 ## Agent Fields
 
@@ -218,15 +220,78 @@ curl -X PUT "https://api.n-gate.io/api/remote-hand-agent/agent_abc" \
 
 Each Remote Hand Agent can have one or more runtime instances tracked independently. Instances capture the live execution state of processes or containers running on the agent, separate from the agent's own registration record.
 
+### List Instances
+
+Retrieve all instances currently associated with an agent.
+
+**`GET /api/remote-hand-agent/:agentId/instances`**
+
+```bash
+curl -X GET "https://api.n-gate.io/api/remote-hand-agent/agent_abc/instances" \
+  -H "Authorization: Bearer <token>"
+```
+
+### Example Response
+
+```json
+{
+  "data": [
+    {
+      "id": "inst_xyz",
+      "agentId": "agent_abc",
+      "status": "running",
+      "createdAt": "2024-01-15T11:00:00Z"
+    }
+  ]
+}
+```
+
+### Start an Instance
+
+Launch a new runtime instance on the specified agent.
+
+**`POST /api/remote-hand-agent/:agentId/instances`**
+
+```bash
+curl -X POST "https://api.n-gate.io/api/remote-hand-agent/agent_abc/instances" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{}'
+```
+
+A `201 Created` response returns the new instance record, including the system-generated `id` and initial status.
+
+```json
+{
+  "id": "inst_xyz",
+  "agentId": "agent_abc",
+  "status": "running",
+  "createdAt": "2024-01-15T11:00:00Z"
+}
+```
+
+### Stop an Instance
+
+Terminate a specific instance by its ID.
+
+**`DELETE /api/remote-hand-agent/:agentId/instances/:instanceId`**
+
+```bash
+curl -X DELETE "https://api.n-gate.io/api/remote-hand-agent/agent_abc/instances/inst_xyz" \
+  -H "Authorization: Bearer <token>"
+```
+
+A `204 No Content` response indicates the instance has been successfully stopped and removed.
+
 <Note>
-  Agent instance management (listing, starting, stopping) is covered in the **Agent Instances** reference. Use the `id` returned when registering your agent to query its associated instances.
+  Stopping an instance does not delete the parent agent record. The agent remains registered and can have new instances started at any time.
 </Note>
 
 ---
 
 ## Use Cases
 
-<CardGroup cols={3}>
+<CardGroup cols={2}>
   <Card title="Remote Data Center Management" icon="building-columns">
     Register physical agents at remote colocation sites to monitor rack health, trigger remote hands tasks, and coordinate maintenance windows — all without on-site access.
   </Card>
@@ -235,5 +300,8 @@ Each Remote Hand Agent can have one or more runtime instances tracked independen
   </Card>
   <Card title="Logical Agent Orchestration" icon="network-wired">
     Register `virtual` agents to represent microservices, automation workers, or integration middleware — giving your team a unified registry of all active processes across environments.
+  </Card>
+  <Card title="Instance Lifecycle Control" icon="circle-play">
+    Start and stop runtime instances on demand to scale workloads, run one-off diagnostic tasks, or safely drain an agent before a maintenance window.
   </Card>
 </CardGroup>
