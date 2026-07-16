@@ -1,0 +1,123 @@
+---
+title: "SSL Certificates API — Regenerate TLS Certificates Dynamically"
+sidebarTitle: "SSL Certificates"
+description: "Trigger on-demand TLS certificate regeneration for your N-Gate domain. Returns the new certificate metadata including issuance and expiry timestamps."
+---
+
+N-Gate manages TLS certificates for your gateway domains automatically, but there are scenarios — certificate compromise, domain migration, upcoming expiry, or compliance requirements — where you need to trigger an out-of-cycle regeneration programmatically. The SSL Certificates API provides a single endpoint to do exactly that. The regeneration process requests a new certificate from the configured certificate authority, installs it on the platform's TLS termination layer, and returns the new certificate metadata. Because this involves a live swap of the active certificate, there will be a brief interruption to TLS handshakes while the new certificate is installed.
+
+<Warning>
+  Regenerating a certificate causes a **brief service interruption** — typically
+  2–10 seconds — while the new certificate is installed at the TLS termination
+  layer. Always schedule this operation during a **planned maintenance window**
+  and notify affected consumers in advance. Do not trigger regeneration during
+  peak traffic periods.
+</Warning>
+
+---
+
+## Regenerate SSL/TLS Certificate
+
+<br />
+
+```http
+POST /api/system/ssl/regenerate
+```
+
+Triggers synchronous certificate regeneration for the specified domain (or the platform's current primary domain if none is provided). The response is returned only after the new certificate has been fully installed, giving you authoritative `issuedAt` and `expiresAt` values to store in your certificate inventory.
+
+### Body Parameters
+
+<ParamField body="domain" type="string">
+  The domain name for which to regenerate the certificate (e.g.
+  `"api.example.com"`). If omitted, the regeneration targets the platform's
+  currently configured primary domain. Must be a domain that is already
+  configured and verified in your N-Gate deployment.
+</ParamField>
+
+<ParamField body="reason" type="string">
+  An optional free-text reason for the regeneration. Stored in the platform
+  audit log alongside the operation record (e.g. `"Routine 90-day renewal"`,
+  `"Certificate compromise suspected"`).
+</ParamField>
+
+### Response
+
+<ResponseField name="status" type="string">
+  Always `"regenerated"` when the operation completes successfully.
+</ResponseField>
+<ResponseField name="domain" type="string">
+  The domain the new certificate was issued for. Useful for confirming the
+  target domain when the request omitted the `domain` field.
+</ResponseField>
+<ResponseField name="issuedAt" type="string">
+  ISO 8601 timestamp of when the certificate authority issued the new
+  certificate.
+</ResponseField>
+<ResponseField name="expiresAt" type="string">
+  ISO 8601 timestamp of when the new certificate expires. Use this to schedule
+  your next renewal.
+</ResponseField>
+
+<Note>
+  Certificate issuance typically completes within 5–30 seconds depending on
+  the configured certificate authority. The HTTP request will remain open
+  (synchronous) until the installation is complete. Set your HTTP client
+  timeout to at least 60 seconds when calling this endpoint to avoid a
+  premature timeout on the client side while the server is still working.
+</Note>
+
+<CodeGroup>
+```bash cURL — regenerate for current domain
+curl --request POST \
+  --url "https://api.n-gate.io/api/system/ssl/regenerate" \
+  --header "Authorization: Bearer <admin-token>" \
+  --header "Content-Type: application/json" \
+  --data '{
+    "reason": "Routine 90-day renewal"
+  }'
+```
+
+```bash cURL — regenerate for a specific domain
+curl --request POST \
+  --url "https://api.n-gate.io/api/system/ssl/regenerate" \
+  --header "Authorization: Bearer <admin-token>" \
+  --header "Content-Type: application/json" \
+  --data '{
+    "domain": "api.example.com",
+    "reason": "Certificate compromise suspected — emergency rotation"
+  }'
+```
+
+```json Response
+{
+  "status": "regenerated",
+  "domain": "api.example.com",
+  "issuedAt": "2024-11-20T15:00:00.000Z",
+  "expiresAt": "2025-02-18T15:00:00.000Z"
+}
+```
+</CodeGroup>
+
+---
+
+## Error Responses
+
+All errors follow the standard N-Gate error envelope:
+
+```json
+{
+  "error": "<message>",
+  "statusCode": 400,
+  "timestamp": "2024-11-20T15:00:05.000Z"
+}
+```
+
+| Status | Meaning                                                                    |
+| ------ | -------------------------------------------------------------------------- |
+| `400`  | The provided `domain` is not configured or verified in this deployment.    |
+| `401`  | Missing or invalid Bearer token.                                           |
+| `403`  | Token does not have system-level admin permissions.                        |
+| `409`  | A certificate regeneration is already in progress for this domain.         |
+| `502`  | The certificate authority was unreachable; no changes were made.           |
+| `504`  | Certificate issuance timed out; check platform logs for partial state.     |

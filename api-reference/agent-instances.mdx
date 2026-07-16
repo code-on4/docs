@@ -1,0 +1,248 @@
+---
+title: "Agent Instances API — Manage Remote Agent Runtime Instances"
+sidebarTitle: "Agent Instances"
+description: "Start, list, and stop runtime instances of a remote hand agent. Each instance represents one active execution session on a registered agent."
+---
+
+An *agent* is the registered unit — the hardware device, the virtual process blueprint, or the on-site terminal — while an *instance* is a single active execution session running on top of that agent. The relationship is analogous to a class and its objects: one agent can run many concurrent instances, each with its own lifecycle, start time, and metadata. You use the Agent Instances API to start new execution sessions, inspect running and historical instances, and cleanly stop sessions when work is complete. All instance routes are nested under `/api/remote-hand-agent/:agentId/`, so you always operate in the context of a specific parent agent.
+
+---
+
+## List Agent Instances
+
+<br />
+
+```http
+GET /api/remote-hand-agent/:agentId/instances
+```
+
+Returns a paginated list of all instances — running, stopped, and errored — that have been started under the specified agent.
+
+### Path Parameters
+
+<ParamField path="agentId" type="string" required>
+  The unique ID of the parent agent whose instances you want to list.
+</ParamField>
+
+### Response
+
+<ResponseField name="data" type="array">
+  <Expandable title="Instance object">
+    <ResponseField name="id" type="string">
+      Unique identifier for the instance.
+    </ResponseField>
+    <ResponseField name="agentId" type="string">
+      The parent agent this instance belongs to.
+    </ResponseField>
+    <ResponseField name="status" type="string">
+      Current runtime state. One of:
+      - `running` — the instance is active and processing.
+      - `stopped` — the instance was cleanly terminated.
+      - `error` — the instance exited due to an unexpected failure.
+    </ResponseField>
+    <ResponseField name="startedAt" type="string">
+      ISO 8601 timestamp of when the instance was started.
+    </ResponseField>
+    <ResponseField name="stoppedAt" type="string">
+      ISO 8601 timestamp of when the instance stopped. `null` if still running.
+    </ResponseField>
+    <ResponseField name="metadata" type="object">
+      Metadata object provided at start time. `null` if none was supplied.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="pagination" type="object">
+  <Expandable title="Pagination object">
+    <ResponseField name="page" type="integer">Current page number.</ResponseField>
+    <ResponseField name="limit" type="integer">Records per page.</ResponseField>
+    <ResponseField name="total" type="integer">Total number of matching records.</ResponseField>
+  </Expandable>
+</ResponseField>
+
+<CodeGroup>
+```bash cURL
+curl --request GET \
+  --url "https://api.n-gate.io/api/remote-hand-agent/agt_rh001/instances" \
+  --header "Authorization: Bearer <token>"
+```
+
+```json Response
+{
+  "data": [
+    {
+      "id": "ins_001",
+      "agentId": "agt_rh001",
+      "status": "running",
+      "startedAt": "2024-11-20T10:00:00.000Z",
+      "stoppedAt": null,
+      "metadata": {
+        "taskId": "task_999",
+        "priority": "high"
+      }
+    },
+    {
+      "id": "ins_002",
+      "agentId": "agt_rh001",
+      "status": "stopped",
+      "startedAt": "2024-11-19T08:00:00.000Z",
+      "stoppedAt": "2024-11-19T08:45:00.000Z",
+      "metadata": null
+    }
+  ],
+  "pagination": {
+    "page": 1,
+    "limit": 20,
+    "total": 2
+  }
+}
+```
+</CodeGroup>
+
+---
+
+## Start an Instance
+
+<br />
+
+```http
+POST /api/remote-hand-agent/:agentId/instances
+```
+
+Starts a new runtime instance on the specified agent. The agent must be in `online` status — attempting to start an instance on an `offline` or `maintenance` agent returns a `409 Conflict`. You may optionally pass a `metadata` object to tag the instance with task identifiers, priority flags, or any other contextual information your integration requires.
+
+### Path Parameters
+
+<ParamField path="agentId" type="string" required>
+  The unique ID of the agent to start an instance on.
+</ParamField>
+
+### Body Parameters
+
+<ParamField body="metadata" type="object">
+  An optional free-form JSON object attached to this instance for tracking
+  purposes (e.g. `{"taskId": "task_999", "priority": "high"}`). You can read
+  this back when listing instances to correlate instances with your own task
+  management system.
+</ParamField>
+
+### Response
+
+<ResponseField name="id" type="string">Unique ID assigned to the new instance.</ResponseField>
+<ResponseField name="agentId" type="string">Parent agent ID.</ResponseField>
+<ResponseField name="status" type="string">Always `"running"` immediately after a successful start.</ResponseField>
+<ResponseField name="startedAt" type="string">ISO 8601 timestamp of when the instance started.</ResponseField>
+<ResponseField name="metadata" type="object">Metadata object, if provided; otherwise `null`.</ResponseField>
+
+<Note>
+  N-Gate does not enforce a maximum number of concurrent instances per agent by
+  default. If your agent hardware or virtual environment has capacity
+  constraints, implement concurrency guards in your application before calling
+  this endpoint.
+</Note>
+
+<CodeGroup>
+```bash cURL — with metadata
+curl --request POST \
+  --url "https://api.n-gate.io/api/remote-hand-agent/agt_rh001/instances" \
+  --header "Authorization: Bearer <token>" \
+  --header "Content-Type: application/json" \
+  --data '{
+    "metadata": {
+      "taskId": "task_999",
+      "priority": "high"
+    }
+  }'
+```
+
+```bash cURL — without metadata
+curl --request POST \
+  --url "https://api.n-gate.io/api/remote-hand-agent/agt_rh001/instances" \
+  --header "Authorization: Bearer <token>" \
+  --header "Content-Type: application/json" \
+  --data '{}'
+```
+
+```json Response
+{
+  "id": "ins_003",
+  "agentId": "agt_rh001",
+  "status": "running",
+  "startedAt": "2024-11-20T11:00:00.000Z",
+  "metadata": {
+    "taskId": "task_999",
+    "priority": "high"
+  }
+}
+```
+</CodeGroup>
+
+---
+
+## Stop an Instance
+
+<br />
+
+```http
+DELETE /api/remote-hand-agent/:agentId/instances/:instanceId
+```
+
+Sends a graceful stop signal to a running instance. The instance's status transitions to `stopped` and `stoppedAt` is recorded. Calling this endpoint on an instance that is already `stopped` or in `error` state returns a `409 Conflict`.
+
+### Path Parameters
+
+<ParamField path="agentId" type="string" required>
+  The unique ID of the parent agent.
+</ParamField>
+
+<ParamField path="instanceId" type="string" required>
+  The unique ID of the instance to stop.
+</ParamField>
+
+### Response
+
+<ResponseField name="message" type="string">
+  Confirmation string. Always `"Instance stopped"` on success.
+</ResponseField>
+
+<Warning>
+  Stopping an instance is not the same as deleting it. The historical record
+  (including `startedAt`, `stoppedAt`, and `metadata`) is retained for audit
+  purposes and will continue to appear in the list endpoint with status
+  `"stopped"`.
+</Warning>
+
+<CodeGroup>
+```bash cURL
+curl --request DELETE \
+  --url "https://api.n-gate.io/api/remote-hand-agent/agt_rh001/instances/ins_003" \
+  --header "Authorization: Bearer <token>"
+```
+
+```json Response
+{
+  "message": "Instance stopped"
+}
+```
+</CodeGroup>
+
+---
+
+## Error Responses
+
+All errors follow the standard N-Gate error envelope:
+
+```json
+{
+  "error": "<message>",
+  "statusCode": 400,
+  "timestamp": "2024-11-20T11:05:00.000Z"
+}
+```
+
+| Status | Meaning                                                                     |
+| ------ | --------------------------------------------------------------------------- |
+| `401`  | Missing or invalid Bearer token.                                            |
+| `403`  | Token lacks instance-write permission.                                      |
+| `404`  | Agent or instance not found.                                                |
+| `409`  | Agent is offline/maintenance (start), or instance is already stopped (stop). |

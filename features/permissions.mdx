@@ -1,0 +1,167 @@
+---
+title: "Workspace Permissions & Roles in N-Gate"
+sidebarTitle: "Permissions"
+description: "Control who can do what in your N-Gate workspace by assigning roles to members and auditing access with the permissions API."
+---
+
+Every N-Gate workspace has a built-in access-control layer that maps each member to a **role**. Roles determine which API operations a user may perform — from read-only inspection to full administrative control. By assigning the most restrictive role that still lets someone do their job, you reduce the blast radius of credential leaks and misconfiguration.
+
+## Roles overview
+
+<CardGroup cols={3}>
+  <Card title="Admin" icon="shield-halved">
+    Full read and write access to all workspace resources, including managing other members' permissions.
+  </Card>
+  <Card title="Operator" icon="sliders">
+    Can create, update, and delete routes, consumers, and mandates, but cannot modify workspace membership or billing.
+  </Card>
+  <Card title="Viewer" icon="eye">
+    Read-only access to all workspace resources. Cannot create, update, or delete anything.
+  </Card>
+</CardGroup>
+
+<Note>
+  Role IDs follow the pattern `role_admin`, `role_operator`, and `role_viewer`. Use these exact strings when calling the permissions API.
+</Note>
+
+## Key identifiers
+
+| Identifier | Description |
+|---|---|
+| `workspaceId` | The workspace whose permission list you are managing |
+| `permissionId` | Unique identifier for a single member–role assignment |
+| `roleId` | The role being granted (`role_admin`, `role_operator`, `role_viewer`) |
+| `userId` | The user to whom the permission record belongs |
+
+---
+
+## List permissions
+
+Retrieve every permission record for a workspace to see which role each member currently holds.
+
+### Endpoint
+
+```
+GET /api/workspaces/:workspaceId/permissions
+```
+
+### Request
+
+<ParamField path="workspaceId" type="string" required>
+  The ID of the workspace whose permission list you want to retrieve.
+</ParamField>
+
+<ParamField header="Authorization" type="string" required>
+  Bearer token for authenticating the request. Format: `Bearer <token>`.
+</ParamField>
+
+### Example
+
+```bash
+curl -X GET "https://api.n-gate.io/api/workspaces/ws_123/permissions" \
+  -H "Authorization: Bearer <token>"
+```
+
+### Response
+
+```json
+[
+  {
+    "permissionId": "perm_abc",
+    "userId": "usr_xyz",
+    "roleId": "role_admin",
+    "workspaceId": "ws_123"
+  }
+]
+```
+
+<Tip>
+  Pipe the response through `jq '.[].roleId'` to quickly audit which roles are active in your workspace.
+</Tip>
+
+---
+
+## Update a permission
+
+Change a member's role by supplying their `permissionId` and the new `roleId`.
+
+### Endpoint
+
+```
+PUT /api/workspaces/:workspaceId/permissions
+```
+
+### Request body
+
+<ParamField body="permissionId" type="string" required>
+  The ID of the permission record you want to update.
+</ParamField>
+
+<ParamField body="roleId" type="string" required>
+  The new role to assign. Accepted values: `role_admin`, `role_operator`, `role_viewer`.
+</ParamField>
+
+### Example
+
+```bash
+curl -X PUT "https://api.n-gate.io/api/workspaces/ws_123/permissions" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "permissionId": "perm_abc",
+    "roleId": "role_viewer"
+  }'
+```
+
+### Response
+
+```json
+{
+  "permissionId": "perm_abc",
+  "userId": "usr_xyz",
+  "roleId": "role_viewer",
+  "workspaceId": "ws_123"
+}
+```
+
+<Warning>
+  Demoting the last `role_admin` member in a workspace locks everyone out of administrative operations. Always confirm at least one admin remains before downgrading a permission.
+</Warning>
+
+---
+
+## Permissions workflow
+
+<Steps>
+  <Step title="List current permissions">
+    Call `GET /api/workspaces/:workspaceId/permissions` to capture a snapshot of existing role assignments.
+  </Step>
+  <Step title="Identify the permission record">
+    Locate the `permissionId` for the member whose role you want to change.
+  </Step>
+  <Step title="Update the role">
+    Call `PUT /api/workspaces/:workspaceId/permissions` with the `permissionId` and the desired `roleId`.
+  </Step>
+  <Step title="Verify the change">
+    Re-run the list call and confirm the `roleId` reflects your update.
+  </Step>
+</Steps>
+
+---
+
+## Best practices
+
+<AccordionGroup>
+  <Accordion title="Apply the principle of least privilege">
+    Start every new workspace member with the `role_viewer` role and only escalate after confirming the need. Granting `role_admin` broadly increases the risk of accidental or malicious changes to workspace-wide settings.
+  </Accordion>
+  <Accordion title="Audit permissions on a schedule">
+    Export the permissions list monthly and review it against your current team roster. Remove or downgrade permissions for anyone who has left the project, changed teams, or no longer needs write access.
+  </Accordion>
+  <Accordion title="Use service accounts for automated tooling">
+    Create dedicated user accounts for CI/CD pipelines or scripts and assign them `role_operator`. This keeps automated changes traceable and separate from human activity in your audit logs.
+  </Accordion>
+  <Accordion title="Rotate tokens alongside role changes">
+    When you demote a member, also rotate or revoke the Bearer token they were using. A demoted user retaining a valid token can still authenticate, but their API calls will be rejected based on the new role.
+  </Accordion>
+</AccordionGroup>

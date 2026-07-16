@@ -1,0 +1,239 @@
+---
+title: "Remote Hand Agents: Register & Monitor Agents"
+sidebarTitle: "Remote Agents"
+description: "Register, configure, and monitor physical and virtual infrastructure agents from a unified N-Gate control plane."
+---
+
+Remote Hand Agents are the bridge between N-Gate's control plane and your physical or virtual infrastructure. By registering an agent — whether it represents a server rack in a remote data center or a logical orchestration process in the cloud — you gain centralised visibility into its status, location, and runtime instances. N-Gate lets you register new agents, update their configuration, and track every agent in your workspace from a single API surface.
+
+## Agent Fields
+
+<ParamField body="id" type="string">
+  Unique system-generated identifier for the agent (e.g. `agent_abc`).
+</ParamField>
+
+<ParamField body="name" type="string" required>
+  A human-readable label for the agent (e.g. `DataCenter-Agent-01`).
+</ParamField>
+
+<ParamField body="type" type="string" required>
+  The nature of the agent. One of `physical` or `virtual`.
+</ParamField>
+
+<ParamField body="location" type="string" required>
+  A descriptive location string (e.g. `Lagos, NG` or `us-east-1`).
+</ParamField>
+
+<ParamField body="status" type="string">
+  Current operational state. One of `online`, `offline`, or `maintenance`. Set by the platform.
+</ParamField>
+
+<ParamField body="workspaceId" type="string" required>
+  The workspace this agent belongs to.
+</ParamField>
+
+<ParamField body="metadata" type="object">
+  Arbitrary key-value pairs for storing agent-specific context (e.g. rack ID, device serial, tags).
+</ParamField>
+
+<ParamField body="createdAt" type="string">
+  ISO 8601 timestamp of when the agent was registered.
+</ParamField>
+
+<ParamField body="updatedAt" type="string">
+  ISO 8601 timestamp of the most recent update to the agent record.
+</ParamField>
+
+---
+
+## List Agents
+
+Retrieve all Remote Hand Agents registered in your workspace.
+
+**`GET /api/remote-hand-agent`**
+
+```bash
+curl -X GET "https://api.n-gate.io/api/remote-hand-agent" \
+  -H "Authorization: Bearer <token>"
+```
+
+### Example Response
+
+```json
+{
+  "data": [
+    {
+      "id": "agent_abc",
+      "name": "DataCenter-Agent-01",
+      "type": "physical",
+      "status": "online",
+      "location": "Lagos, NG",
+      "workspaceId": "ws_123",
+      "createdAt": "2024-01-15T10:00:00Z",
+      "updatedAt": "2024-01-15T10:00:00Z"
+    }
+  ]
+}
+```
+
+<Note>
+  Listing agents is scoped to your workspace. Agents belonging to other workspaces are never returned, even if you have cross-workspace roles.
+</Note>
+
+---
+
+## Register an Agent
+
+Add a new Remote Hand Agent to your workspace by sending a `POST` request with the agent's details.
+
+**`POST /api/remote-hand-agent`**
+
+### Request Body
+
+<ParamField body="name" type="string" required>
+  Display name for the agent.
+</ParamField>
+
+<ParamField body="type" type="string" required>
+  Agent type — `physical` for on-premises hardware, `virtual` for cloud or software-defined agents.
+</ParamField>
+
+<ParamField body="location" type="string" required>
+  Physical or logical location of the agent.
+</ParamField>
+
+<ParamField body="workspaceId" type="string" required>
+  The workspace this agent will be associated with.
+</ParamField>
+
+<ParamField body="metadata" type="object">
+  Optional metadata object. Useful for storing rack IDs, asset tags, or environment labels.
+</ParamField>
+
+### Steps to Register an Agent
+
+<Steps>
+  <Step title="Prepare your agent payload">
+    Gather the agent name, type, location, and any metadata you want to attach. Your `workspaceId` is available in your workspace settings dashboard.
+  </Step>
+  <Step title="Send the registration request">
+    ```bash
+    curl -X POST "https://api.n-gate.io/api/remote-hand-agent" \
+      -H "Authorization: Bearer <token>" \
+      -H "Content-Type: application/json" \
+      -d '{
+        "name": "DataCenter-Agent-01",
+        "type": "physical",
+        "location": "Lagos, NG",
+        "workspaceId": "ws_123",
+        "metadata": {
+          "rackId": "rack-05"
+        }
+      }'
+    ```
+  </Step>
+  <Step title="Confirm the response">
+    A successful registration returns a `201 Created` response with the full agent record, including its system-generated `id` and initial `status`.
+
+    ```json
+    {
+      "id": "agent_abc",
+      "name": "DataCenter-Agent-01",
+      "type": "physical",
+      "status": "online",
+      "location": "Lagos, NG",
+      "workspaceId": "ws_123",
+      "createdAt": "2024-01-15T10:00:00Z"
+    }
+    ```
+  </Step>
+  <Step title="Store the agent ID">
+    Save the returned `id` — you will need it to update the agent, query its runtime instances, or reference it in dependent workflows.
+  </Step>
+</Steps>
+
+---
+
+## Update an Agent
+
+Modify the configuration of an existing agent by providing its `id` in the URL path.
+
+**`PUT /api/remote-hand-agent/:id`**
+
+You can update any writable field (e.g. `name`, `location`, `metadata`). Omit fields you do not want to change.
+
+### Example: Move an Agent to a New Location
+
+```bash
+curl -X PUT "https://api.n-gate.io/api/remote-hand-agent/agent_abc" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "location": "Abuja, NG",
+    "metadata": {
+      "rackId": "rack-12",
+      "notes": "Relocated during Q1 expansion"
+    }
+  }'
+```
+
+### Example: Set an Agent to Maintenance Mode
+
+```bash
+curl -X PUT "https://api.n-gate.io/api/remote-hand-agent/agent_abc" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "status": "maintenance"
+  }'
+```
+
+<Tip>
+  Set an agent's `status` to `maintenance` before performing firmware upgrades or physical rack work. This prevents alerts from firing during expected downtime.
+</Tip>
+
+---
+
+## Agent Status Lifecycle
+
+<Tabs>
+  <Tab title="online">
+    The agent is registered, reachable, and actively reporting to the N-Gate control plane. Runtime instances associated with this agent are considered healthy.
+  </Tab>
+  <Tab title="offline">
+    The agent has not communicated with the control plane within the expected heartbeat window. Investigate connectivity and agent process health.
+  </Tab>
+  <Tab title="maintenance">
+    The agent has been manually flagged for scheduled work. Monitoring alerts are suppressed, and orchestration tasks will not be dispatched to this agent.
+  </Tab>
+</Tabs>
+
+<Warning>
+  If a `physical` agent transitions to `offline` unexpectedly, check for network outages, power failures, or hardware faults at the agent's registered location before assuming a software issue.
+</Warning>
+
+---
+
+## Agent Instances
+
+Each Remote Hand Agent can have one or more runtime instances tracked independently. Instances capture the live execution state of processes or containers running on the agent, separate from the agent's own registration record.
+
+<Note>
+  Agent instance management (listing, starting, stopping) is covered in the **Agent Instances** reference. Use the `id` returned when registering your agent to query its associated instances.
+</Note>
+
+---
+
+## Use Cases
+
+<CardGroup cols={3}>
+  <Card title="Remote Data Center Management" icon="building-columns">
+    Register physical agents at remote colocation sites to monitor rack health, trigger remote hands tasks, and coordinate maintenance windows — all without on-site access.
+  </Card>
+  <Card title="Field Device Coordination" icon="satellite-dish">
+    Model IoT gateways, edge routers, or field sensors as `physical` agents and push configuration updates or diagnostics requests through the N-Gate control plane.
+  </Card>
+  <Card title="Logical Agent Orchestration" icon="network-wired">
+    Register `virtual` agents to represent microservices, automation workers, or integration middleware — giving your team a unified registry of all active processes across environments.
+  </Card>
+</CardGroup>

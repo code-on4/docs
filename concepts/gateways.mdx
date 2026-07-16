@@ -1,0 +1,293 @@
+---
+title: "Gateways & Gateway Consumers in N-Gate"
+sidebarTitle: "Gateways"
+description: "Learn how N-Gate Gateways represent upstream services and how Gateway Consumers control authorized API client access through each connection."
+---
+
+A Gateway in N-Gate represents an upstream connected service — an institution, a partner system, or any backend you want to make accessible in a controlled, authenticated way. Gateway Consumers are the API clients and applications that have been explicitly authorized to send requests through a specific gateway. Together, these two concepts give you precise control over who can call what, on behalf of which upstream system, without exposing raw credentials or direct backend access to anyone.
+
+## The Gateway Model
+
+Think of a Gateway as a named, managed connection to an upstream service. When you create a gateway record in N-Gate, you register the upstream service's identity and connection details — N-Gate then acts as the authenticated intermediary for every call that flows through it.
+
+```
+┌──────────────────────────────────────────────────────────────┐
+│                         N-GATE                               │
+│                                                              │
+│  ┌─────────────────────┐       ┌──────────────────────────┐  │
+│  │  GATEWAY CONSUMER   │──────▶│        GATEWAY           │  │
+│  │                     │  authorized  │                   │  │
+│  │  API Client / App   │       │  Upstream Service Record │  │
+│  │  (API key / creds)  │       │  (institution / partner) │  │
+│  └─────────────────────┘       └────────────┬─────────────┘  │
+│                                             │                │
+└─────────────────────────────────────────────┼────────────────┘
+                                              │ authenticated proxy
+                                              ▼
+                                 ┌────────────────────────┐
+                                 │   UPSTREAM SERVICE     │
+                                 │  (partner API, backend │
+                                 │   institution, etc.)   │
+                                 └────────────────────────┘
+```
+
+A request from a Gateway Consumer only reaches the upstream service if:
+1. The consumer is registered and linked to the target gateway.
+2. The consumer's credentials (API key or token) are valid.
+3. The N-Gate authorization layer approves the request against the workspace's Permission Roles.
+
+<Note>
+  Gateways are scoped to a workspace. A gateway created in one workspace is invisible to all other workspaces, maintaining full multi-tenant isolation.
+</Note>
+
+---
+
+## Gateways vs. Gateway Consumers
+
+<CardGroup cols={2}>
+  <Card title="Gateway" icon="tower-broadcast">
+    Represents an upstream service or institution. Stores the connection configuration, upstream endpoint details, and any service-level credentials. Administered at `/api/gateways`.
+  </Card>
+  <Card title="Gateway Consumer" icon="user-check">
+    Represents an API client authorized to call through a specific gateway. Holds the consumer's identity, API keys, and the list of gateways they are permitted to use. Managed at `/api/gateway-consumer`.
+  </Card>
+</CardGroup>
+
+The relationship is many-to-many: a single gateway can serve multiple consumers, and a single consumer can be authorized to call through multiple gateways. You manage these links explicitly, so access is always intentional and auditable.
+
+---
+
+## Administering Gateways
+
+<Tabs>
+  <Tab title="Create a Gateway">
+    <Steps>
+      <Step title="Register the upstream service">
+        Send a `POST` request to `/api/gateways` with the upstream service's name, endpoint, and any relevant metadata.
+
+        ```http
+        POST https://api.n-gate.io/api/gateways
+        Authorization: Bearer <token>
+        Content-Type: application/json
+
+        {
+          "workspaceId": "wsp_abc123",
+          "name": "Acme Payment Institution",
+          "upstreamUrl": "https://api.acme-payments.com",
+          "description": "Primary payment processing partner for US region"
+        }
+        ```
+      </Step>
+      <Step title="Receive the gateway record">
+        N-Gate responds with a `gatewayId` that you will reference when registering consumers and constructing proxy calls.
+
+        ```json
+        {
+          "gatewayId": "gw_pay001",
+          "workspaceId": "wsp_abc123",
+          "name": "Acme Payment Institution",
+          "upstreamUrl": "https://api.acme-payments.com",
+          "createdAt": "2024-01-15T12:00:00Z"
+        }
+        ```
+      </Step>
+    </Steps>
+  </Tab>
+
+  <Tab title="List Gateways">
+    Retrieve all gateways registered in your workspace.
+
+    ```http
+    GET https://api.n-gate.io/api/gateways?workspaceId=wsp_abc123
+    Authorization: Bearer <token>
+    ```
+
+    Use this endpoint to audit active upstream connections, verify endpoint URLs, and confirm which services are currently reachable through N-Gate.
+
+    <Tip>
+      Regularly audit your gateway list to remove or disable connections to decommissioned upstream services. Inactive gateway records with valid credentials are an unnecessary attack surface.
+    </Tip>
+  </Tab>
+
+  <Tab title="Update a Gateway">
+    Modify a gateway's upstream URL or metadata without deleting and recreating the record. Consumer authorizations and routing rules linked to the gateway are preserved.
+
+    ```http
+    PATCH https://api.n-gate.io/api/gateways/{gatewayId}
+    Authorization: Bearer <token>
+    Content-Type: application/json
+
+    {
+      "upstreamUrl": "https://api-v2.acme-payments.com",
+      "description": "Migrated to v2 endpoint - Jan 2024"
+    }
+    ```
+
+    <Warning>
+      Updating a gateway's `upstreamUrl` takes effect immediately for all consumers linked to that gateway. Coordinate any upstream migration with your consumer teams before applying changes.
+    </Warning>
+  </Tab>
+
+  <Tab title="Delete a Gateway">
+    Remove a gateway when the upstream service is decommissioned or the integration is no longer needed.
+
+    ```http
+    DELETE https://api.n-gate.io/api/gateways/{gatewayId}
+    Authorization: Bearer <token>
+    ```
+
+    Deleting a gateway also invalidates all associated consumer links. Consumers previously authorized through this gateway will receive `403 Forbidden` on their next request until they are re-linked to a different gateway.
+  </Tab>
+</Tabs>
+
+---
+
+## Managing Gateway Consumers
+
+<Tabs>
+  <Tab title="Register a Consumer">
+    <Steps>
+      <Step title="Create the consumer record">
+        Register the API client by posting its identity and the gateway it should be authorized to use.
+
+        ```http
+        POST https://api.n-gate.io/api/gateway-consumer
+        Authorization: Bearer <token>
+        Content-Type: application/json
+
+        {
+          "workspaceId": "wsp_abc123",
+          "gatewayId": "gw_pay001",
+          "name": "Mobile Checkout App",
+          "description": "iOS/Android checkout client for storefront"
+        }
+        ```
+      </Step>
+      <Step title="Receive credentials">
+        N-Gate generates an API key (or other credential type) for the consumer and returns it in the response. Store this key securely — it is only shown once.
+
+        ```json
+        {
+          "consumerId": "con_mob001",
+          "gatewayId": "gw_pay001",
+          "name": "Mobile Checkout App",
+          "apiKey": "ngk_live_xxxxxxxxxxxxxxxxxxxx",
+          "createdAt": "2024-01-15T12:30:00Z"
+        }
+        ```
+
+        <Warning>
+          The `apiKey` is returned only at creation time. N-Gate does not store the plaintext key — if it is lost, you must rotate the credential by generating a new one.
+        </Warning>
+      </Step>
+      <Step title="Distribute the API key">
+        Provide the `apiKey` to the client application. The consumer will include this key in its requests to N-Gate to authenticate as this registered consumer and route through the linked gateway.
+      </Step>
+    </Steps>
+  </Tab>
+
+  <Tab title="List Consumers">
+    View all consumers registered in your workspace, optionally filtered by gateway.
+
+    ```http
+    GET https://api.n-gate.io/api/gateway-consumer?workspaceId=wsp_abc123&gatewayId=gw_pay001
+    Authorization: Bearer <token>
+    ```
+
+    The response lists each consumer's name, linked gateway, creation date, and status. API keys are never returned in list responses — only metadata is exposed.
+  </Tab>
+
+  <Tab title="Rotate API Keys">
+    When a consumer's API key is compromised or expired, rotate it to issue a new credential while preserving the consumer record and gateway link.
+
+    ```http
+    POST https://api.n-gate.io/api/gateway-consumer/{consumerId}/rotate-key
+    Authorization: Bearer <token>
+    ```
+
+    The old key is immediately invalidated. N-Gate returns the new key in the response — distribute it to the consumer application before the rotation window closes.
+
+    <Tip>
+      Build key rotation into your operational runbook. Schedule rotations on a regular cadence (e.g., every 90 days) rather than reacting only to suspected compromises.
+    </Tip>
+  </Tab>
+
+  <Tab title="Remove a Consumer">
+    Deauthorize a consumer from a gateway entirely by deleting the consumer record.
+
+    ```http
+    DELETE https://api.n-gate.io/api/gateway-consumer/{consumerId}
+    Authorization: Bearer <token>
+    ```
+
+    After deletion, any requests using the consumer's API key are rejected immediately. This is the fastest way to revoke access for an offboarded client application or partner.
+  </Tab>
+</Tabs>
+
+---
+
+## How a Request Flows Through a Gateway
+
+<Steps>
+  <Step title="Consumer sends request to N-Gate">
+    The client application sends an API request to N-Gate's proxy endpoint, authenticating with its consumer API key in the `Authorization` header.
+
+    ```http
+    POST https://api.n-gate.io/api/routes/proxy
+    Authorization: Bearer ngk_live_xxxxxxxxxxxxxxxxxxxx
+    Content-Type: application/json
+
+    {
+      "gatewayId": "gw_pay001",
+      "path": "/charge",
+      "method": "POST",
+      "body": { "amount": 1000, "currency": "USD" }
+    }
+    ```
+  </Step>
+  <Step title="N-Gate validates the consumer">
+    N-Gate looks up the API key, confirms the consumer is registered, active, and authorized to use the specified `gatewayId`. If validation fails at any point, N-Gate returns `401 Unauthorized` or `403 Forbidden` — no request leaves N-Gate.
+  </Step>
+  <Step title="N-Gate resolves the upstream target">
+    Using the gateway record linked to the consumer, N-Gate retrieves the upstream service's `upstreamUrl` and constructs the full target endpoint for the request.
+  </Step>
+  <Step title="Request forwarded to upstream service">
+    N-Gate proxies the request to the upstream service, injecting any required service-level credentials or headers. The upstream receives a properly authenticated call without ever seeing the consumer's API key.
+  </Step>
+  <Step title="Response returned to consumer">
+    The upstream service's response — status, headers, and body — is streamed back through N-Gate to the consumer application. The consumer sees the upstream's response as if it had called the service directly.
+  </Step>
+</Steps>
+
+---
+
+## Use Cases
+
+<Accordion title="Multi-institution connectivity">
+  Financial platforms, healthcare networks, and logistics hubs often need to connect to dozens of partner institutions. Create one gateway per institution and manage access centrally — adding or revoking a consumer affects only that specific gateway without disrupting others.
+</Accordion>
+
+<Accordion title="Partner API access control">
+  Give external partners a Gateway Consumer credential scoped only to the gateway they need. Partners never receive raw backend credentials, and you can revoke their access instantly by deleting or disabling the consumer record.
+</Accordion>
+
+<Accordion title="Isolating environments">
+  Create separate gateways for your staging and production upstream services, then link the appropriate consumers to each. Development teams test against staging consumers without any risk of accidentally hitting production.
+</Accordion>
+
+<Accordion title="Auditing and visibility">
+  Because all traffic flows through N-Gate's gateway layer, you get a single audit trail for every consumer request — what was called, when, by whom, and what the upstream returned. No direct backend calls bypass the log.
+</Accordion>
+
+---
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Workspaces" icon="building" href="/concepts/workspaces">
+    Understand how workspace isolation and Permission Roles govern gateway and consumer administration.
+  </Card>
+  <Card title="API Routing & Proxying" icon="route" href="/concepts/routing">
+    Learn how Routes and the proxy endpoint work together with gateways to forward traffic.
+  </Card>
+</CardGroup>

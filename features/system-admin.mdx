@@ -1,0 +1,183 @@
+---
+title: "System Administration: Config & SSL Management"
+sidebarTitle: "System Admin"
+description: "Manage platform-level configuration uploads and SSL/TLS certificate regeneration using N-Gate's privileged system administration endpoints."
+---
+
+N-Gate's system administration endpoints give privileged operators direct control over platform-level settings — from uploading new configuration files to regenerating SSL/TLS certificates. These operations affect the entire platform and are intentionally restricted to workspace administrators with system-level permissions. Before invoking any endpoint in this section, confirm that you have the required role and that your change is scheduled to minimise impact on running workloads.
+
+<Warning>
+  System administration endpoints are **restricted to workspace admins with system-level permissions**. Unauthorised calls will return `403 Forbidden`. Misuse of these endpoints can affect platform availability for all users in your workspace.
+</Warning>
+
+---
+
+## System Configuration Upload
+
+Upload a new configuration file to update platform settings or apply environment-specific overrides. N-Gate parses and applies the file immediately upon a successful upload.
+
+**`POST /api/system/config`**
+
+The request body must be sent as `multipart/form-data` with the configuration file attached.
+
+### Request Parameters
+
+<ParamField body="config" type="file" required>
+  The configuration file to upload. Accepted formats depend on your platform deployment (e.g. `.yaml`, `.json`, `.env`). Check with your platform operator for supported formats.
+</ParamField>
+
+### Steps to Upload a Configuration File
+
+<Steps>
+  <Step title="Prepare your configuration file">
+    Edit your configuration file locally and validate its syntax before uploading. An invalid file will be rejected with a `400 Bad Request` response containing a validation error message.
+  </Step>
+  <Step title="Schedule the change">
+    Configuration uploads are applied immediately. Coordinate with your team and schedule the upload during a low-traffic window to limit any disruption.
+  </Step>
+  <Step title="Send the upload request">
+    ```bash
+    curl -X POST "https://api.n-gate.io/api/system/config" \
+      -H "Authorization: Bearer <token>" \
+      -F "config=@/path/to/platform-config.yaml"
+    ```
+  </Step>
+  <Step title="Confirm the applied configuration">
+    A successful upload returns a `200 OK` response with a confirmation payload. Save the `configId` for audit and rollback reference.
+
+    ```json
+    {
+      "status": "applied",
+      "configId": "cfg_abc",
+      "appliedAt": "2024-01-15T10:00:00Z"
+    }
+  ```
+  </Step>
+</Steps>
+
+### Response Fields
+
+<ParamField body="status" type="string">
+  Confirmation that the configuration was applied. Always `"applied"` on success.
+</ParamField>
+
+<ParamField body="configId" type="string">
+  A unique identifier for this configuration snapshot. Use this ID for auditing or when contacting N-Gate support about a configuration issue.
+</ParamField>
+
+<ParamField body="appliedAt" type="string">
+  ISO 8601 timestamp recording when the configuration was applied to the platform.
+</ParamField>
+
+<Note>
+  N-Gate does not automatically roll back a failed configuration. If your platform behaves unexpectedly after an upload, re-upload your last known good configuration file immediately and open a support ticket with the `configId`.
+</Note>
+
+### Use Cases
+
+<CardGroup cols={2}>
+  <Card title="Platform Settings Updates" icon="sliders">
+    Push updated rate limits, feature flags, or integration credentials to the platform without a full redeployment.
+  </Card>
+  <Card title="Environment-Specific Configuration" icon="layer-group">
+    Apply staging or production configuration profiles as part of a CI/CD promotion pipeline, keeping environments consistent and auditable.
+  </Card>
+</CardGroup>
+
+---
+
+## SSL/TLS Certificate Regeneration
+
+Trigger an on-demand regeneration of the platform's SSL/TLS certificate. N-Gate will provision a new certificate for `api.n-gate.io` and replace the existing one.
+
+**`POST /api/system/ssl/regenerate`**
+
+This endpoint accepts no request body.
+
+<Warning>
+  **SSL regeneration causes a brief service interruption.** Active connections may be dropped during the certificate swap. Always schedule regeneration during a planned maintenance window and notify users in advance.
+</Warning>
+
+### When to Regenerate
+
+<Accordion title="Certificate expiry">
+  Renew your certificate before it expires to prevent clients from receiving TLS handshake errors. N-Gate will alert you when your certificate approaches its expiry date, but you can regenerate proactively at any time.
+</Accordion>
+
+<Accordion title="Security incident">
+  If you suspect the private key has been compromised — through a leaked secret, a breached build system, or a third-party disclosure — regenerate immediately. Do not wait for a scheduled window in a confirmed security incident.
+</Accordion>
+
+<Accordion title="Domain changes">
+  After updating the platform's primary domain or adding a new subdomain, regenerate the certificate so the new Subject Alternative Names (SANs) are included in the issued certificate.
+</Accordion>
+
+### Steps to Regenerate the SSL Certificate
+
+<Steps>
+  <Step title="Announce the maintenance window">
+    Notify all API consumers of the planned interruption. Even brief downtime can cause automated retries and alert storms if clients are not prepared.
+  </Step>
+  <Step title="Verify your permissions">
+    Confirm that your token belongs to an account with system-level admin permissions. The endpoint will return `403 Forbidden` if your role is insufficient.
+  </Step>
+  <Step title="Trigger regeneration">
+    ```bash
+    curl -X POST "https://api.n-gate.io/api/system/ssl/regenerate" \
+      -H "Authorization: Bearer <token>"
+    ```
+  </Step>
+  <Step title="Confirm the new certificate">
+    The response includes the new expiry date and the domain the certificate was issued for. Verify both values are correct.
+
+    ```json
+    {
+      "status": "regenerated",
+      "expiresAt": "2025-01-15T10:00:00Z",
+      "domain": "api.n-gate.io"
+    }
+    ```
+  </Step>
+  <Step title="Validate connectivity">
+    After regeneration completes, run a TLS handshake check against `api.n-gate.io` to confirm the new certificate is being served correctly before closing the maintenance window.
+
+    ```bash
+    curl -vI https://api.n-gate.io 2>&1 | grep -E "SSL|expire|subject"
+    ```
+  </Step>
+</Steps>
+
+### Response Fields
+
+<ParamField body="status" type="string">
+  Confirms the outcome of the operation. Always `"regenerated"` on success.
+</ParamField>
+
+<ParamField body="expiresAt" type="string">
+  ISO 8601 timestamp indicating when the newly issued certificate will expire.
+</ParamField>
+
+<ParamField body="domain" type="string">
+  The primary domain the certificate was issued for (e.g. `api.n-gate.io`).
+</ParamField>
+
+<Tip>
+  Set a calendar reminder two weeks before the `expiresAt` date so you have ample time to schedule the next maintenance window well in advance of expiry.
+</Tip>
+
+---
+
+## Access Control Summary
+
+Both system administration endpoints enforce the same access requirements:
+
+| Requirement              | Detail                                                         |
+|--------------------------|----------------------------------------------------------------|
+| **Authentication**       | `Authorization: Bearer <token>` header on every request        |
+| **Role**                 | Workspace admin with system-level permissions                  |
+| **Scope**                | Operations apply platform-wide within your workspace           |
+| **Audit**                | All calls are logged; `configId` and certificate metadata are returned for traceability |
+
+<Warning>
+  Never share your admin bearer token in client-side code, public repositories, or logs. Rotate the token immediately if you believe it has been exposed.
+</Warning>

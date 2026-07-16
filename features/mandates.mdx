@@ -1,0 +1,231 @@
+---
+title: "Mandates: Business Authorization Documents in N-Gate"
+sidebarTitle: "Mandates"
+description: "Submit, track, and retrieve business authorization mandate documents through N-Gate's mandate API, from upload to final approval or rejection."
+---
+
+Mandates in N-Gate represent formal business authorization documents — such as financial authorization agreements or inter-institutional approval records — that require submission, review, and a tracked decision. You upload a mandate document alongside its metadata in a single multipart request, and N-Gate stores the document, creates a mandate record with a `pending` status, and moves it through a structured review lifecycle until it reaches an `approved` or `rejected` outcome.
+
+## Mandate object
+
+| Field | Type | Description |
+|---|---|---|
+| `id` | string | Unique mandate identifier, auto-generated on creation |
+| `workspaceId` | string | Workspace this mandate belongs to |
+| `type` | string | Category of mandate (e.g. `business_authorization`) |
+| `description` | string | Human-readable summary of what this mandate authorizes |
+| `status` | string | Current lifecycle state: `pending`, `approved`, or `rejected` |
+| `documentUrl` | string | URL of the uploaded document, available after processing |
+| `createdAt` | string | ISO 8601 timestamp of mandate submission |
+
+---
+
+## Status lifecycle
+
+Every mandate moves through the following states after submission:
+
+```
+submitted → pending → approved
+                    ↘ rejected
+```
+
+<Note>
+  Your mandate enters the `pending` state immediately after a successful upload. Transition to `approved` or `rejected` occurs after a review process — either automated or manual, depending on your workspace configuration.
+</Note>
+
+---
+
+## Submit a mandate
+
+Upload a mandate document along with its metadata using a `multipart/form-data` request.
+
+### Endpoint
+
+```
+POST /api/mandates
+```
+
+### Request fields
+
+<ParamField body="document" type="file" required>
+  The mandate document file to upload (e.g. a PDF or signed image). Sent as a multipart form field.
+</ParamField>
+
+<ParamField body="workspaceId" type="string" required>
+  The workspace this mandate is associated with.
+</ParamField>
+
+<ParamField body="type" type="string" required>
+  The mandate category. Example: `business_authorization`.
+</ParamField>
+
+<ParamField body="description" type="string">
+  A plain-language description of what this mandate authorizes. Helps reviewers understand context without opening the document.
+</ParamField>
+
+### Example
+
+```bash
+curl -X POST "https://api.n-gate.io/api/mandates" \
+  -H "Authorization: Bearer <token>" \
+  -F "document=@/path/to/mandate.pdf" \
+  -F "workspaceId=ws_123" \
+  -F "type=business_authorization" \
+  -F "description=Authorization for cross-border payment settlement with Partner Bank Ltd."
+```
+
+### Response
+
+```json
+{
+  "id": "mandate_abc",
+  "status": "pending",
+  "type": "business_authorization",
+  "workspaceId": "ws_123",
+  "createdAt": "2024-01-15T10:00:00Z"
+}
+```
+
+<Tip>
+  Store the returned `id` right away. You'll use it to poll the mandate's status and retrieve the final `documentUrl` once the mandate is processed.
+</Tip>
+
+---
+
+## Check mandate status
+
+Retrieve the current state and full details of a mandate by its ID.
+
+### Endpoint
+
+```
+GET /api/mandates/:id
+```
+
+### Path parameters
+
+<ParamField path="id" type="string" required>
+  The ID of the mandate to retrieve (e.g. `mandate_abc`).
+</ParamField>
+
+### Example
+
+```bash
+curl -X GET "https://api.n-gate.io/api/mandates/mandate_abc" \
+  -H "Authorization: Bearer <token>"
+```
+
+### Response (approved)
+
+```json
+{
+  "id": "mandate_abc",
+  "workspaceId": "ws_123",
+  "type": "business_authorization",
+  "description": "Authorization for cross-border payment settlement with Partner Bank Ltd.",
+  "status": "approved",
+  "documentUrl": "https://storage.n-gate.io/mandates/mandate_abc/mandate.pdf",
+  "createdAt": "2024-01-15T10:00:00Z"
+}
+```
+
+### Response (rejected)
+
+```json
+{
+  "id": "mandate_abc",
+  "workspaceId": "ws_123",
+  "type": "business_authorization",
+  "description": "Authorization for cross-border payment settlement with Partner Bank Ltd.",
+  "status": "rejected",
+  "documentUrl": "https://storage.n-gate.io/mandates/mandate_abc/mandate.pdf",
+  "createdAt": "2024-01-15T10:00:00Z"
+}
+```
+
+<Warning>
+  A `rejected` mandate cannot be reactivated. If your mandate is rejected, submit a new mandate with a corrected document. Do not reuse the rejected `id`.
+</Warning>
+
+---
+
+## Submission workflow
+
+<Steps>
+  <Step title="Prepare your document">
+    Gather the mandate document (PDF recommended) and confirm the correct `workspaceId` and `type` for your submission.
+  </Step>
+  <Step title="Upload the mandate">
+    POST to `/api/mandates` using `multipart/form-data` with the document file and metadata fields. Record the returned `id`.
+  </Step>
+  <Step title="Confirm pending status">
+    Immediately call `GET /api/mandates/:id` and verify the `status` field reads `pending`. If it doesn't, check that your upload completed without errors.
+  </Step>
+  <Step title="Poll for a decision">
+    Periodically call `GET /api/mandates/:id` until `status` transitions to `approved` or `rejected`. Implement exponential back-off to avoid overwhelming the API.
+  </Step>
+  <Step title="Act on the outcome">
+    If `approved`, retrieve the `documentUrl` and store it in your records. If `rejected`, review the reason, correct the document, and submit a new mandate.
+  </Step>
+</Steps>
+
+---
+
+## Handling mandate outcomes
+
+<Tabs>
+  <Tab title="Approved">
+    When the status reaches `approved`, the mandate is valid and you may proceed with the authorized business action. Retrieve the `documentUrl` to download or archive the approved document.
+
+    ```bash
+    curl -X GET "https://api.n-gate.io/api/mandates/mandate_abc" \
+      -H "Authorization: Bearer <token>"
+    # Check: "status": "approved"
+    # Then access: "documentUrl" for the final document
+    ```
+  </Tab>
+  <Tab title="Rejected">
+    A rejected mandate means the submitted document did not satisfy the review criteria. Submit a corrected document as a new mandate.
+
+    ```bash
+    # Submit a corrected mandate
+    curl -X POST "https://api.n-gate.io/api/mandates" \
+      -H "Authorization: Bearer <token>" \
+      -F "document=@/path/to/corrected_mandate.pdf" \
+      -F "workspaceId=ws_123" \
+      -F "type=business_authorization" \
+      -F "description=Corrected authorization — updated signatory details."
+    ```
+  </Tab>
+  <Tab title="Still pending">
+    If a mandate remains in `pending` longer than expected, verify the document uploaded correctly by checking the `documentUrl` field. Contact your workspace administrator if the mandate is stuck.
+
+    ```bash
+    curl -X GET "https://api.n-gate.io/api/mandates/mandate_abc" \
+      -H "Authorization: Bearer <token>"
+    # "status": "pending" — check documentUrl is populated
+    ```
+  </Tab>
+</Tabs>
+
+---
+
+## Best practices
+
+<AccordionGroup>
+  <Accordion title="Use clear, specific descriptions">
+    Write descriptions that identify the authorizing parties, the scope of the authorization, and the relevant dates or amounts. Reviewers rely on descriptions to make fast, accurate decisions without needing to open every document.
+  </Accordion>
+  <Accordion title="Validate documents before upload">
+    Ensure your document is complete, correctly signed, and in the expected format (PDF) before submitting. Uploading an incomplete document wastes review cycles and delays your workflow.
+  </Accordion>
+  <Accordion title="Implement polling with back-off">
+    Don't poll `GET /api/mandates/:id` in a tight loop. Start with a 30-second interval and double it on each subsequent check up to a maximum of 10 minutes. This keeps your application responsive without generating unnecessary API load.
+  </Accordion>
+  <Accordion title="Archive approved mandates">
+    Once a mandate reaches `approved`, download the document from `documentUrl` and store it in your own document management system. N-Gate storage is not intended as a long-term archive.
+  </Accordion>
+  <Accordion title="Keep workspaceId consistent">
+    Always associate mandates with the correct workspace. Mandates submitted to the wrong workspace may not reach the intended reviewers and can complicate audit trails.
+  </Accordion>
+</AccordionGroup>

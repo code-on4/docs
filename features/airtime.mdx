@@ -1,0 +1,181 @@
+---
+title: "Airtime Transactions: Manage Telecom Top-Ups"
+sidebarTitle: "Airtime"
+description: "Track, filter, and reconcile airtime transactions across telecom providers using N-Gate's unified transaction management API."
+---
+
+N-Gate integrates directly with telecom providers so you can manage the full lifecycle of airtime transactions from a single control plane. Whether you're building a top-up service, reconciling billing records, or monitoring real-time transaction status, the Airtime Transactions API gives you consistent, paginated access to every transaction your workspace has initiated.
+
+## Transaction Fields
+
+Every airtime transaction returned by the API contains the following fields:
+
+<ParamField body="id" type="string" required>
+  Unique identifier for the transaction (e.g. `txn_abc`).
+</ParamField>
+
+<ParamField body="workspaceId" type="string" required>
+  The workspace that owns this transaction.
+</ParamField>
+
+<ParamField body="amount" type="number" required>
+  The monetary value of the airtime top-up.
+</ParamField>
+
+<ParamField body="currency" type="string" required>
+  ISO 4217 currency code (e.g. `NGN`, `USD`).
+</ParamField>
+
+<ParamField body="recipient" type="string" required>
+  The destination phone number in E.164 format (e.g. `+2341234567890`).
+</ParamField>
+
+<ParamField body="provider" type="string" required>
+  The telecom provider that processed the transaction (e.g. `MTN`, `Airtel`, `Glo`).
+</ParamField>
+
+<ParamField body="status" type="string" required>
+  Current lifecycle state of the transaction. One of `pending`, `completed`, or `failed`.
+</ParamField>
+
+<ParamField body="createdAt" type="string" required>
+  ISO 8601 timestamp recording when the transaction was created.
+</ParamField>
+
+---
+
+## List Airtime Transactions
+
+Retrieve a paginated list of all airtime transactions in your workspace. You can narrow results using optional query filters.
+
+**`GET /api/airtime-transactions`**
+
+### Query Parameters
+
+<ParamField query="status" type="string">
+  Filter by transaction status. Accepted values: `pending`, `completed`, `failed`.
+</ParamField>
+
+<ParamField query="provider" type="string">
+  Filter by telecom provider name (e.g. `MTN`).
+</ParamField>
+
+<ParamField query="from" type="string">
+  Start of the date range in ISO 8601 format (e.g. `2024-01-01T00:00:00Z`).
+</ParamField>
+
+<ParamField query="to" type="string">
+  End of the date range in ISO 8601 format (e.g. `2024-01-31T23:59:59Z`).
+</ParamField>
+
+<ParamField query="page" type="integer">
+  Page number to retrieve. Defaults to `1`.
+</ParamField>
+
+<ParamField query="limit" type="integer">
+  Number of results per page. Defaults to `20`.
+</ParamField>
+
+### Example: List All Transactions
+
+```bash
+curl -X GET "https://api.n-gate.io/api/airtime-transactions" \
+  -H "Authorization: Bearer <token>"
+```
+
+### Example Response
+
+```json
+{
+  "data": [
+    {
+      "id": "txn_abc",
+      "amount": 100,
+      "currency": "NGN",
+      "recipient": "+2341234567890",
+      "provider": "MTN",
+      "status": "completed",
+      "createdAt": "2024-01-15T10:00:00Z"
+    }
+  ],
+  "pagination": {
+    "page": 1,
+    "limit": 20,
+    "total": 150
+  }
+}
+```
+
+### Example: Filter by Status and Date Range
+
+```bash
+curl -X GET "https://api.n-gate.io/api/airtime-transactions?status=completed&from=2024-01-01T00:00:00Z&to=2024-01-31T23:59:59Z" \
+  -H "Authorization: Bearer <token>"
+```
+
+### Example: Filter by Provider
+
+```bash
+curl -X GET "https://api.n-gate.io/api/airtime-transactions?provider=MTN&page=1&limit=20" \
+  -H "Authorization: Bearer <token>"
+```
+
+<Note>
+  All list requests are scoped to your workspace. Ensure you include a valid `Authorization: Bearer <token>` header on every request.
+</Note>
+
+---
+
+## Pagination
+
+Every list response includes a `pagination` object so you can walk through large result sets efficiently.
+
+| Field   | Type    | Description                              |
+|---------|---------|------------------------------------------|
+| `page`  | integer | The current page number.                 |
+| `limit` | integer | The number of records returned per page. |
+| `total` | integer | The total number of matching records.    |
+
+<Tip>
+  To fetch all records, keep incrementing `page` until `page * limit >= total`.
+</Tip>
+
+---
+
+## Transaction Status Lifecycle
+
+Use the `status` field to monitor where each transaction sits in its lifecycle.
+
+```
+pending  ──►  completed
+   │
+   └────────► failed
+```
+
+<Accordion title="Status descriptions">
+  **`pending`** — The transaction has been submitted to the provider and is awaiting confirmation.
+
+  **`completed`** — The provider has successfully delivered airtime to the recipient.
+
+  **`failed`** — The transaction could not be completed. Check provider logs or retry with a new transaction.
+</Accordion>
+
+<Warning>
+  A `failed` status is terminal — you cannot reactivate a failed transaction. Initiate a new transaction to retry a top-up.
+</Warning>
+
+---
+
+## Use Cases
+
+<CardGroup cols={3}>
+  <Card title="Top-Up Services" icon="mobile">
+    Programmatically top up customer phones and confirm delivery using the `completed` status before fulfilling orders.
+  </Card>
+  <Card title="Telecom Billing Integration" icon="file-invoice">
+    Pull transaction records into your billing pipeline using date-range filters for accurate, provider-level cost attribution.
+  </Card>
+  <Card title="Transaction Reconciliation" icon="scale-balanced">
+    Compare `pending` and `failed` counts against `completed` counts across providers to identify settlement discrepancies.
+  </Card>
+</CardGroup>

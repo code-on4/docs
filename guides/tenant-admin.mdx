@@ -1,0 +1,282 @@
+---
+title: "Tenant Administration Guide for N-Gate"
+sidebarTitle: "Tenant Admin"
+description: "Learn how to set up and manage your N-Gate tenant: create workspaces, configure permissions, and invite your team."
+---
+
+As a Tenant Administrator, you are responsible for the foundational structure of your organization's presence on N-Gate. This guide walks you through every step of that setup — from your first login to inviting team members and fine-tuning their access — so your institution can start building integrations on a solid, well-governed foundation.
+
+<Note>
+  All requests to the N-Gate API must be made over HTTPS. The base URL for every endpoint is `https://api.n-gate.io`.
+</Note>
+
+## Prerequisites
+
+Before you begin, make sure you have:
+
+<CardGroup cols={2}>
+  <Card title="Admin Credentials" icon="key">
+    Your tenant admin username and password, issued during onboarding.
+  </Card>
+  <Card title="HTTP Client" icon="terminal">
+    `curl`, Postman, or any HTTP client capable of sending JSON request bodies.
+  </Card>
+  <Card title="Workspace Plan" icon="sitemap">
+    A clear idea of the workspaces your institution needs and who will belong to each one.
+  </Card>
+  <Card title="Member Email List" icon="envelope">
+    Email addresses for every team member you intend to invite.
+  </Card>
+</CardGroup>
+
+---
+
+## Administration Workflow
+
+<Steps>
+
+  <Step title="Log In and Obtain a Bearer Token">
+    Every N-Gate API call requires a valid Bearer token. You obtain one by posting your credentials to the `/auth/login` endpoint. The token is short-lived, so repeat this step whenever it expires.
+
+    <CodeGroup>
+    ```bash cURL
+    curl --request POST \
+      --url https://api.n-gate.io/auth/login \
+      --header 'Content-Type: application/json' \
+      --data '{
+        "username": "admin@yourorg.example",
+        "password": "your-secure-password"
+      }'
+    ```
+
+    ```json Response
+    {
+      "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+      "expiresIn": 3600
+    }
+    ```
+    </CodeGroup>
+
+    Copy the value of `token` from the response. You will pass it as a `Bearer` token in the `Authorization` header of every subsequent request.
+
+    <Tip>
+      Store the token in a shell variable for convenience:
+      ```bash
+      TOKEN="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+      ```
+      Then reference it as `$TOKEN` in every `curl` call below.
+    </Tip>
+  </Step>
+
+  <Step title="Create a Workspace for Your Institution">
+    Workspaces are the primary organizational unit in N-Gate. Each workspace maps to a logical boundary — a business unit, project, or environment — and carries its own routes, gateways, and permissions. Create one now with a descriptive name.
+
+    <CodeGroup>
+    ```bash cURL
+    curl --request POST \
+      --url https://api.n-gate.io/api/workspaces \
+      --header "Authorization: Bearer $TOKEN" \
+      --header 'Content-Type: application/json' \
+      --data '{
+        "name": "Payments Platform",
+        "description": "Workspace for all payment-related API routes and consumers."
+      }'
+    ```
+
+    ```json Response
+    {
+      "id": "ws_01HX9ABCDE2FGHIJ",
+      "name": "Payments Platform",
+      "description": "Workspace for all payment-related API routes and consumers.",
+      "createdAt": "2025-01-15T09:00:00Z"
+    }
+    ```
+    </CodeGroup>
+
+    Save the returned `id` — you'll use it as `workspaceId` in every subsequent workspace-scoped request.
+
+    <Tip>
+      Use a naming convention that encodes the environment, such as `"Payments Platform – Production"` vs `"Payments Platform – Staging"`, to avoid confusion when listing workspaces later.
+    </Tip>
+
+    To confirm the workspace was created, list all workspaces for your tenant:
+
+    ```bash
+    curl --request GET \
+      --url https://api.n-gate.io/api/workspaces \
+      --header "Authorization: Bearer $TOKEN"
+    ```
+  </Step>
+
+  <Step title="Configure Permission Roles for the Workspace">
+    N-Gate uses a role-based access control (RBAC) model scoped to each workspace. Before inviting anyone, review the existing permission roles and update them to match your institution's access policy.
+
+    **List current permissions:**
+
+    ```bash
+    curl --request GET \
+      --url https://api.n-gate.io/api/workspaces/ws_01HX9ABCDE2FGHIJ/permissions \
+      --header "Authorization: Bearer $TOKEN"
+    ```
+
+    The response lists every role defined for the workspace along with its allowed actions. Review each role carefully before assigning it to a team member.
+
+    **Update permissions for a role:**
+
+    When the default roles don't match your policy, use `PUT` to redefine them. The request body should contain the full updated permissions object for the workspace.
+
+    <CodeGroup>
+    ```bash cURL
+    curl --request PUT \
+      --url https://api.n-gate.io/api/workspaces/ws_01HX9ABCDE2FGHIJ/permissions \
+      --header "Authorization: Bearer $TOKEN" \
+      --header 'Content-Type: application/json' \
+      --data '{
+        "roles": [
+          {
+            "id": "role_viewer",
+            "name": "Viewer",
+            "permissions": ["routes:read", "gateways:read"]
+          },
+          {
+            "id": "role_editor",
+            "name": "Editor",
+            "permissions": ["routes:read", "routes:write", "gateways:read", "gateways:write"]
+          },
+          {
+            "id": "role_admin",
+            "name": "Workspace Admin",
+            "permissions": ["*"]
+          }
+        ]
+      }'
+    ```
+
+    ```json Response
+    {
+      "workspaceId": "ws_01HX9ABCDE2FGHIJ",
+      "roles": [
+        { "id": "role_viewer", "name": "Viewer", "permissions": ["routes:read", "gateways:read"] },
+        { "id": "role_editor", "name": "Editor", "permissions": ["routes:read", "routes:write", "gateways:read", "gateways:write"] },
+        { "id": "role_admin",  "name": "Workspace Admin", "permissions": ["*"] }
+      ],
+      "updatedAt": "2025-01-15T09:15:00Z"
+    }
+    ```
+    </CodeGroup>
+
+    <Warning>
+      Replacing permissions with `PUT` is a full overwrite. Any role not included in the request body will be removed. Always read current permissions first and include all roles you want to keep.
+    </Warning>
+  </Step>
+
+  <Step title="Invite Team Members and Assign Roles">
+    With roles defined, you can now invite team members to the workspace. Each invitation requires the member's email address and the `roleId` of the role you want to assign them.
+
+    <CodeGroup>
+    ```bash Invite an Editor
+    curl --request POST \
+      --url https://api.n-gate.io/api/workspaces/ws_01HX9ABCDE2FGHIJ/invite \
+      --header "Authorization: Bearer $TOKEN" \
+      --header 'Content-Type: application/json' \
+      --data '{
+        "email": "jane.doe@yourorg.example",
+        "roleId": "role_editor"
+      }'
+    ```
+
+    ```bash Invite a Viewer
+    curl --request POST \
+      --url https://api.n-gate.io/api/workspaces/ws_01HX9ABCDE2FGHIJ/invite \
+      --header "Authorization: Bearer $TOKEN" \
+      --header 'Content-Type: application/json' \
+      --data '{
+        "email": "john.observer@yourorg.example",
+        "roleId": "role_viewer"
+      }'
+    ```
+
+    ```bash Invite a Workspace Admin
+    curl --request POST \
+      --url https://api.n-gate.io/api/workspaces/ws_01HX9ABCDE2FGHIJ/invite \
+      --header "Authorization: Bearer $TOKEN" \
+      --header 'Content-Type: application/json' \
+      --data '{
+        "email": "alice.admin@yourorg.example",
+        "roleId": "role_admin"
+      }'
+    ```
+    </CodeGroup>
+
+    N-Gate sends each invitee an email with a link to accept the invitation and activate their account. Invitations expire after **48 hours** — resend them if a team member reports not receiving one.
+
+    <Note>
+      You can only assign roles that already exist in the workspace's permissions configuration. If you try to assign an undefined `roleId`, the API returns a `422 Unprocessable Entity` error.
+    </Note>
+  </Step>
+
+  <Step title="Manage Existing Members">
+    Over time you'll need to audit who has access to a workspace and adjust roles as team responsibilities change. Use the permissions endpoint to stay on top of access control.
+
+    **View all current permissions and members:**
+
+    ```bash
+    curl --request GET \
+      --url https://api.n-gate.io/api/workspaces/ws_01HX9ABCDE2FGHIJ/permissions \
+      --header "Authorization: Bearer $TOKEN"
+    ```
+
+    The response includes member assignments alongside role definitions, giving you a full picture of who can do what in the workspace.
+
+    **Update a member's role:**
+
+    To change a member's role, issue a `PUT` request to the permissions endpoint with an updated `members` array that reflects the new role assignment.
+
+    ```bash
+    curl --request PUT \
+      --url https://api.n-gate.io/api/workspaces/ws_01HX9ABCDE2FGHIJ/permissions \
+      --header "Authorization: Bearer $TOKEN" \
+      --header 'Content-Type: application/json' \
+      --data '{
+        "members": [
+          { "email": "jane.doe@yourorg.example", "roleId": "role_admin" },
+          { "email": "john.observer@yourorg.example", "roleId": "role_viewer" }
+        ]
+      }'
+    ```
+
+    <Warning>
+      As with role definitions, `PUT` on the permissions endpoint is a full overwrite of the `members` array. Always include every current member in the payload, even those whose roles are not changing — omitting a member will remove their workspace access.
+    </Warning>
+
+    <Tip>
+      Build a regular cadence — monthly or quarterly — for reviewing workspace permissions. Teams change faster than access policies, and stale permissions are a common source of security incidents.
+    </Tip>
+  </Step>
+
+</Steps>
+
+---
+
+## Quick Reference
+
+| Task | Method | Endpoint |
+|---|---|---|
+| Authenticate | `POST` | `/auth/login` |
+| List workspaces | `GET` | `/api/workspaces` |
+| Create workspace | `POST` | `/api/workspaces` |
+| List permissions | `GET` | `/api/workspaces/:workspaceId/permissions` |
+| Update permissions | `PUT` | `/api/workspaces/:workspaceId/permissions` |
+| Invite member | `POST` | `/api/workspaces/:workspaceId/invite` |
+
+---
+
+## Common Errors
+
+| Status | Meaning | Resolution |
+|---|---|---|
+| `401 Unauthorized` | Missing or expired Bearer token | Re-authenticate via `POST /auth/login` |
+| `403 Forbidden` | Your account lacks tenant-admin privileges | Contact your N-Gate platform administrator |
+| `404 Not Found` | `workspaceId` does not exist | Verify the ID by listing workspaces with `GET /api/workspaces` |
+| `422 Unprocessable Entity` | Invalid `roleId` in invite or malformed permissions body | Check that the `roleId` exists in the workspace's permission set |
+| `429 Too Many Requests` | Rate limit exceeded | Wait for the `Retry-After` duration indicated in the response header |

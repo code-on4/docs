@@ -1,0 +1,260 @@
+---
+title: "Routes API — Define and Manage Proxy Route Endpoints"
+sidebarTitle: "Routes"
+description: "Register, list, and delete proxy routes in N-Gate. Routes map an inbound path and HTTP method to an upstream target URL within a workspace."
+---
+
+Routes are the core routing configuration of N-Gate. Each route defines an inbound path, an HTTP method, and an upstream target URL — together forming the rule that tells N-Gate how to proxy a given request to the correct backend service. Routes are always scoped to a workspace, letting different teams manage their own upstream mappings without interference. Use this API to register new routes, browse existing ones, and clean up routes that are no longer in use.
+
+---
+
+## List Routes
+
+<br />
+
+`GET /api/routes`
+
+Returns a paginated list of routes. You can optionally filter by workspace to narrow results to a specific team's configuration.
+
+### Query Parameters
+
+<ParamField query="workspaceId" type="string">
+  Filter routes by workspace. When omitted, returns routes across all workspaces the authenticated user belongs to.
+</ParamField>
+
+<ParamField query="page" type="integer" default="1">
+  The page number to retrieve. Defaults to `1`.
+</ParamField>
+
+<ParamField query="limit" type="integer" default="20">
+  Number of routes to return per page. Defaults to `20`. Maximum is `100`.
+</ParamField>
+
+### Response
+
+<ResponseField name="data" type="array">
+  An array of route objects.
+  <Expandable title="Route object">
+    <ResponseField name="id" type="string">
+      The unique identifier for the route.
+    </ResponseField>
+    <ResponseField name="path" type="string">
+      The inbound path this route matches (e.g. `/payments/charge`).
+    </ResponseField>
+    <ResponseField name="target" type="string">
+      The upstream URL requests are forwarded to (e.g. `https://payments.internal/charge`).
+    </ResponseField>
+    <ResponseField name="method" type="string">
+      The HTTP method this route accepts (e.g. `GET`, `POST`, `PUT`).
+    </ResponseField>
+    <ResponseField name="workspaceId" type="string">
+      The workspace this route belongs to.
+    </ResponseField>
+    <ResponseField name="createdAt" type="string (ISO 8601)">
+      Timestamp of when the route was created.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="pagination" type="object">
+  Pagination metadata for the response.
+  <Expandable title="Pagination object">
+    <ResponseField name="page" type="integer">
+      The current page number.
+    </ResponseField>
+    <ResponseField name="limit" type="integer">
+      The number of records per page.
+    </ResponseField>
+    <ResponseField name="total" type="integer">
+      The total number of routes matching the query across all pages.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+### Example
+
+<CodeGroup>
+```bash cURL
+curl --request GET \
+  --url "https://api.n-gate.io/api/routes?workspaceId=ws_01hx9zt3m5kbf2qp&page=1&limit=20" \
+  --header "Authorization: Bearer <token>"
+```
+
+```json Response
+{
+  "data": [
+    {
+      "id": "route_01hxcmk3m5kbf2ra",
+      "path": "/payments/charge",
+      "target": "https://payments.internal/charge",
+      "method": "POST",
+      "workspaceId": "ws_01hx9zt3m5kbf2qp",
+      "createdAt": "2024-05-10T08:00:00Z"
+    },
+    {
+      "id": "route_01hxcmk9r7ncd4sb",
+      "path": "/users/profile",
+      "target": "https://users.internal/profile",
+      "method": "GET",
+      "workspaceId": "ws_01hx9zt3m5kbf2qp",
+      "createdAt": "2024-05-12T09:30:00Z"
+    }
+  ],
+  "pagination": {
+    "page": 1,
+    "limit": 20,
+    "total": 2
+  }
+}
+```
+</CodeGroup>
+
+---
+
+## Create a Route
+
+<br />
+
+`POST /api/routes`
+
+Registers a new proxy route. Once created, the route can be invoked via the [Proxy API](/api-reference/proxy) using its `id`.
+
+### Request Body
+
+<ParamField body="path" type="string" required>
+  The inbound path that identifies this route (e.g. `/payments/charge`). Must start with `/` and be unique within the workspace for the given method.
+</ParamField>
+
+<ParamField body="target" type="string" required>
+  The full upstream URL to forward matching requests to. Must be a valid, absolute URL including the scheme (e.g. `https://payments.internal/charge`).
+</ParamField>
+
+<ParamField body="method" type="string" required>
+  The HTTP method this route accepts. Accepted values: `GET`, `POST`, `PUT`, `PATCH`, `DELETE`.
+</ParamField>
+
+<ParamField body="workspaceId" type="string" required>
+  The workspace this route will be scoped to. The authenticated user must be a member of this workspace.
+</ParamField>
+
+### Response
+
+<ResponseField name="id" type="string">
+  The unique identifier assigned to the newly created route. Store this to use with the Proxy API.
+</ResponseField>
+
+<ResponseField name="path" type="string">
+  The inbound path for this route.
+</ResponseField>
+
+<ResponseField name="target" type="string">
+  The upstream target URL.
+</ResponseField>
+
+<ResponseField name="method" type="string">
+  The HTTP method this route matches.
+</ResponseField>
+
+<ResponseField name="workspaceId" type="string">
+  The workspace this route belongs to.
+</ResponseField>
+
+<ResponseField name="createdAt" type="string (ISO 8601)">
+  Timestamp of when the route was created.
+</ResponseField>
+
+<Note>
+  Route `path` + `method` combinations must be unique within a workspace. Registering a duplicate combination returns `409 Conflict`. If you need to change a route's target, delete the existing route and create a new one.
+</Note>
+
+### Example
+
+<CodeGroup>
+```bash cURL
+curl --request POST \
+  --url "https://api.n-gate.io/api/routes" \
+  --header "Authorization: Bearer <token>" \
+  --header "Content-Type: application/json" \
+  --data '{
+    "path": "/payments/charge",
+    "target": "https://payments.internal/charge",
+    "method": "POST",
+    "workspaceId": "ws_01hx9zt3m5kbf2qp"
+  }'
+```
+
+```json Response
+{
+  "id": "route_01hxcmk3m5kbf2ra",
+  "path": "/payments/charge",
+  "target": "https://payments.internal/charge",
+  "method": "POST",
+  "workspaceId": "ws_01hx9zt3m5kbf2qp",
+  "createdAt": "2024-05-10T08:00:00Z"
+}
+```
+</CodeGroup>
+
+---
+
+## Delete a Route
+
+<br />
+
+`DELETE /api/routes/:id`
+
+Permanently removes a route. Any subsequent Proxy API calls referencing the deleted route's `id` will immediately receive a `404` error.
+
+### Path Parameters
+
+<ParamField path="id" type="string" required>
+  The unique identifier of the route to delete.
+</ParamField>
+
+### Response
+
+<ResponseField name="message" type="string">
+  A confirmation string. Returns `"Route deleted"` on success.
+</ResponseField>
+
+<Warning>
+  Deleting a route is **irreversible** and takes effect immediately. Ensure no active integrations or scheduled jobs are still forwarding requests through this route before deleting it.
+</Warning>
+
+### Example
+
+<CodeGroup>
+```bash cURL
+curl --request DELETE \
+  --url "https://api.n-gate.io/api/routes/route_01hxcmk3m5kbf2ra" \
+  --header "Authorization: Bearer <token>"
+```
+
+```json Response
+{
+  "message": "Route deleted"
+}
+```
+</CodeGroup>
+
+---
+
+## Error Responses
+
+All Routes API errors follow the standard N-Gate error shape:
+
+```json
+{
+  "error": "Route not found",
+  "statusCode": 404,
+  "timestamp": "2024-06-01T12:00:00Z"
+}
+```
+
+| Status Code | Meaning                                                              |
+|-------------|----------------------------------------------------------------------|
+| `400`       | Missing or invalid fields (e.g. non-URL `target`, unsupported method)|
+| `401`       | Missing or invalid `Authorization` token                             |
+| `403`       | Authenticated user is not a member of the specified workspace        |
+| `404`       | Route with the given `id` does not exist                             |
+| `409`       | A route with the same `path` + `method` already exists in the workspace|

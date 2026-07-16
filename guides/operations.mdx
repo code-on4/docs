@@ -1,0 +1,442 @@
+---
+title: "Operations & Support Guide for N-Gate"
+sidebarTitle: "Operations"
+description: "Monitor transactions, manage remote-hand agents, administer system config and SSL, and resolve common operational errors in N-Gate."
+---
+
+The Operations and Support team keeps N-Gate running smoothly after the initial setup is complete. Your responsibilities span monitoring transaction flows, managing the remote-hand agents that extend N-Gate's reach to edge infrastructure, and performing platform-level administrative tasks such as pushing system configuration updates and cycling SSL certificates. This guide organizes all of those tasks in one place, with ready-to-run `curl` commands and a troubleshooting reference for the errors you'll see most often.
+
+<Note>
+  All requests require a valid Bearer token in the `Authorization` header. Authenticate first with `POST https://api.n-gate.io/auth/login`. The base URL for every endpoint in this guide is `https://api.n-gate.io`.
+</Note>
+
+---
+
+## 1. Monitoring Airtime Transactions
+
+Airtime transactions represent the usage events flowing through N-Gate's integrated services. Keeping an eye on transaction volume and status helps you spot anomalies — sudden drops in transaction count, spikes in errors, or stalled entries — before they become customer-facing incidents.
+
+<Steps>
+
+  <Step title="List All Transactions">
+    The core monitoring call is a `GET` to `/api/airtime-transactions`. Without filters, it returns the most recent transactions across your tenant.
+
+    ```bash
+    curl --request GET \
+      --url https://api.n-gate.io/api/airtime-transactions \
+      --header "Authorization: Bearer $TOKEN"
+    ```
+
+    The response is a paginated list of transaction objects, each containing a transaction ID, status, timestamp, and associated metadata.
+  </Step>
+
+  <Step title="Filter Transactions">
+    In practice you'll almost always want to narrow the result set. N-Gate's list endpoint accepts query parameters for filtering by status, date range, and workspace.
+
+    <CodeGroup>
+    ```bash Filter by Status
+    curl --request GET \
+      --url "https://api.n-gate.io/api/airtime-transactions?status=failed" \
+      --header "Authorization: Bearer $TOKEN"
+    ```
+
+    ```bash Filter by Date Range
+    curl --request GET \
+      --url "https://api.n-gate.io/api/airtime-transactions?from=2025-01-01T00:00:00Z&to=2025-01-15T23:59:59Z" \
+      --header "Authorization: Bearer $TOKEN"
+    ```
+
+    ```bash Filter by Workspace
+    curl --request GET \
+      --url "https://api.n-gate.io/api/airtime-transactions?workspaceId=ws_01HX9ABCDE2FGHIJ" \
+      --header "Authorization: Bearer $TOKEN"
+    ```
+
+    ```bash Combined Filters
+    curl --request GET \
+      --url "https://api.n-gate.io/api/airtime-transactions?status=failed&from=2025-01-01T00:00:00Z&workspaceId=ws_01HX9ABCDE2FGHIJ" \
+      --header "Authorization: Bearer $TOKEN"
+    ```
+    </CodeGroup>
+
+    <Tip>
+      Bookmark a filtered view for `status=failed` and check it at the start of each shift. Failed transactions that aren't retried or escalated within your SLA window are the most common source of customer complaints.
+    </Tip>
+  </Step>
+
+  <Step title="Paginate Through Large Result Sets">
+    When transaction volume is high, responses are paginated. Use the `page` and `limit` query parameters to navigate through large sets without overwhelming the response payload.
+
+    <CodeGroup>
+    ```bash Page 1 (20 per page)
+    curl --request GET \
+      --url "https://api.n-gate.io/api/airtime-transactions?page=1&limit=20" \
+      --header "Authorization: Bearer $TOKEN"
+    ```
+
+    ```bash Page 2
+    curl --request GET \
+      --url "https://api.n-gate.io/api/airtime-transactions?page=2&limit=20" \
+      --header "Authorization: Bearer $TOKEN"
+    ```
+
+    ```json Paginated Response Shape
+    {
+      "data": [ /* transaction objects */ ],
+      "pagination": {
+        "page": 1,
+        "limit": 20,
+        "total": 347,
+        "totalPages": 18
+      }
+    }
+    ```
+    </CodeGroup>
+
+    <Note>
+      Use `total` and `totalPages` from the `pagination` object to determine whether you need to iterate further. Automated monitoring scripts should loop until `page >= totalPages`.
+    </Note>
+  </Step>
+
+</Steps>
+
+---
+
+## 2. Managing Remote-Hand Agents
+
+Remote-hand agents are lightweight processes deployed at edge locations — data centres, branch offices, or partner facilities — that extend N-Gate's reach beyond its core infrastructure. You're responsible for registering new agents as they are provisioned, keeping their metadata current, and decommissioning agents that are no longer active.
+
+<Steps>
+
+  <Step title="List Registered Agents">
+    Start by pulling the full list of registered agents to get a current picture of your edge footprint.
+
+    <CodeGroup>
+    ```bash cURL
+    curl --request GET \
+      --url https://api.n-gate.io/api/remote-hand-agent \
+      --header "Authorization: Bearer $TOKEN"
+    ```
+
+    ```json Response
+    {
+      "agents": [
+        {
+          "id": "agent_01ABCDEF",
+          "name": "Lagos-DC-01",
+          "status": "active",
+          "location": "Lagos Data Centre",
+          "lastSeen": "2025-01-15T08:45:00Z"
+        },
+        {
+          "id": "agent_02GHIJKL",
+          "name": "Abuja-Branch-02",
+          "status": "inactive",
+          "location": "Abuja Branch Office",
+          "lastSeen": "2025-01-10T14:30:00Z"
+        }
+      ]
+    }
+    ```
+    </CodeGroup>
+
+    Pay attention to the `lastSeen` timestamp. An agent that hasn't checked in for more than 15 minutes may be offline and should be investigated before it causes proxy failures.
+  </Step>
+
+  <Step title="Register a New Agent">
+    When a new edge location is provisioned, register its agent in N-Gate before the location goes into service. The registration call creates an agent record and returns the credentials the agent process needs to authenticate.
+
+    <CodeGroup>
+    ```bash cURL
+    curl --request POST \
+      --url https://api.n-gate.io/api/remote-hand-agent \
+      --header "Authorization: Bearer $TOKEN" \
+      --header 'Content-Type: application/json' \
+      --data '{
+        "name": "Port-Harcourt-DC-01",
+        "location": "Port Harcourt Data Centre",
+        "description": "Primary edge agent for the South-South region.",
+        "workspaceId": "ws_01HX9ABCDE2FGHIJ"
+      }'
+    ```
+
+    ```json Response
+    {
+      "id": "agent_03MNOPQR",
+      "name": "Port-Harcourt-DC-01",
+      "location": "Port Harcourt Data Centre",
+      "status": "pending",
+      "agentSecret": "agt_sk_LIVE_xxxxxxxxxxxxxxxx",
+      "createdAt": "2025-01-15T11:00:00Z"
+    }
+    ```
+    </CodeGroup>
+
+    <Warning>
+      The `agentSecret` is returned **only once** at registration time. Copy it immediately and store it securely in your secrets manager. If you lose it, you must deregister the agent and create a new one — there is no way to retrieve it after the registration response.
+    </Warning>
+  </Step>
+
+  <Step title="Update an Agent's Status or Metadata">
+    Use `PUT /api/remote-hand-agent/:id` to update an agent's name, location description, or operational status. This is the correct way to mark an agent as `inactive` during scheduled maintenance, or to `active` once maintenance is complete.
+
+    <CodeGroup>
+    ```bash Mark Agent as Inactive (Maintenance)
+    curl --request PUT \
+      --url https://api.n-gate.io/api/remote-hand-agent/agent_03MNOPQR \
+      --header "Authorization: Bearer $TOKEN" \
+      --header 'Content-Type: application/json' \
+      --data '{
+        "status": "inactive",
+        "description": "Offline for scheduled hardware maintenance — 2025-01-20."
+      }'
+    ```
+
+    ```bash Restore Agent to Active
+    curl --request PUT \
+      --url https://api.n-gate.io/api/remote-hand-agent/agent_03MNOPQR \
+      --header "Authorization: Bearer $TOKEN" \
+      --header 'Content-Type: application/json' \
+      --data '{
+        "status": "active",
+        "description": "Primary edge agent for the South-South region."
+      }'
+    ```
+
+    ```json Response
+    {
+      "id": "agent_03MNOPQR",
+      "name": "Port-Harcourt-DC-01",
+      "status": "active",
+      "updatedAt": "2025-01-15T14:00:00Z"
+    }
+    ```
+    </CodeGroup>
+
+    <Tip>
+      Always mark agents as `inactive` before performing maintenance rather than simply stopping the agent process. This prevents N-Gate from routing traffic to an unavailable agent and triggering avoidable `503` errors downstream.
+    </Tip>
+  </Step>
+
+</Steps>
+
+---
+
+## 3. System Administration Tasks
+
+System administration tasks in N-Gate are privileged operations. Only accounts with the `system:admin` platform role should perform them. Carry them out during a maintenance window where possible, and communicate changes to affected teams in advance.
+
+<Steps>
+
+  <Step title="Upload System Configuration">
+    The system configuration file controls platform-wide settings: rate limits, allowed origins, logging levels, feature flags, and more. When you need to apply a configuration change, upload the updated file via `POST /api/system/config`.
+
+    <CodeGroup>
+    ```bash Upload Config File
+    curl --request POST \
+      --url https://api.n-gate.io/api/system/config \
+      --header "Authorization: Bearer $TOKEN" \
+      --header 'Content-Type: application/json' \
+      --data '{
+        "config": {
+          "rateLimits": {
+            "defaultRequestsPerMinute": 1000,
+            "burstMultiplier": 1.5
+          },
+          "logging": {
+            "level": "info",
+            "retentionDays": 90
+          },
+          "features": {
+            "proxyRequestLogging": true,
+            "agentHeartbeatIntervalSeconds": 30
+          }
+        }
+      }'
+    ```
+
+    ```json Response
+    {
+      "status": "applied",
+      "configVersion": "v20250115-001",
+      "appliedAt": "2025-01-15T12:00:00Z"
+    }
+    ```
+    </CodeGroup>
+
+    <Warning>
+      Configuration uploads take effect immediately across all nodes. There is no dry-run or staging mode — validate your config file against the schema in a test environment before uploading to production.
+    </Warning>
+
+    <Note>
+      Save the returned `configVersion` string. If a configuration change causes unexpected behaviour, you can reference this version number when raising a support ticket with the N-Gate platform team to aid rollback.
+    </Note>
+  </Step>
+
+  <Step title="Regenerate SSL Certificates">
+    SSL certificates must be refreshed before they expire to avoid service disruption. N-Gate can regenerate its own certificates on demand via `POST /api/system/ssl/regenerate`. This operation briefly interrupts TLS handshakes on the affected endpoint — schedule it during a low-traffic window.
+
+    <CodeGroup>
+    ```bash Regenerate SSL Certificate
+    curl --request POST \
+      --url https://api.n-gate.io/api/system/ssl/regenerate \
+      --header "Authorization: Bearer $TOKEN" \
+      --header 'Content-Type: application/json' \
+      --data '{
+        "domain": "api.n-gate.io",
+        "notifyOnCompletion": true
+      }'
+    ```
+
+    ```json Response
+    {
+      "status": "in_progress",
+      "domain": "api.n-gate.io",
+      "estimatedCompletionSeconds": 45,
+      "jobId": "ssl_job_99XYZ"
+    }
+    ```
+    </CodeGroup>
+
+    <Tip>
+      Set a calendar reminder **30 days before** each certificate's expiry date. Most incidents caused by expired SSL certificates occur because the regeneration was never scheduled — not because the tooling failed.
+    </Tip>
+
+    Poll the job status using the returned `jobId` if your workflow requires confirmation before proceeding:
+
+    ```bash
+    curl --request GET \
+      --url "https://api.n-gate.io/api/system/ssl/regenerate?jobId=ssl_job_99XYZ" \
+      --header "Authorization: Bearer $TOKEN"
+    ```
+  </Step>
+
+</Steps>
+
+---
+
+## 4. Common Operational Tasks at a Glance
+
+<CardGroup cols={2}>
+  <Card title="Daily Health Check" icon="heart-pulse">
+    List active agents, check for agents with `lastSeen` older than 15 minutes, and scan airtime transactions for a spike in `failed` status entries.
+  </Card>
+  <Card title="Onboarding a New Edge Location" icon="location-dot">
+    Register a new remote-hand agent, save the `agentSecret`, and confirm the agent checks in within 5 minutes by listing agents and verifying `status: active`.
+  </Card>
+  <Card title="Config Change Rollout" icon="sliders">
+    Validate config in staging, upload to production via `POST /api/system/config`, and record the returned `configVersion` in your change log.
+  </Card>
+  <Card title="SSL Certificate Renewal" icon="lock">
+    Run `POST /api/system/ssl/regenerate` in a maintenance window at least 7 days before expiry. Confirm the new certificate fingerprint after the job completes.
+  </Card>
+  <Card title="Incident Investigation" icon="magnifying-glass">
+    Filter airtime transactions by `status=failed` and the relevant time window. Cross-reference the transaction's `workspaceId` with the responsible integration team.
+  </Card>
+  <Card title="Agent Maintenance Window" icon="wrench">
+    Before taking an agent offline, mark it `inactive` via `PUT /api/remote-hand-agent/:id`. Restore to `active` when maintenance is complete and confirm with a `GET` list.
+  </Card>
+</CardGroup>
+
+---
+
+## 5. Troubleshooting: Interpreting Error Responses
+
+<AccordionGroup>
+
+  <Accordion title="400 Bad Request">
+    **What it means:** The request was syntactically valid JSON but contained values that failed server-side validation — a missing required field, an unrecognised enum value, or an improperly formatted date string.
+
+    **What to do:**
+    - Read the `errors` array in the response body. N-Gate returns field-level messages pointing to exactly which field failed and why.
+    - Correct the offending field and retry.
+    - Common culprits: `status` values outside the allowed enum (e.g., `"offline"` instead of `"inactive"`), ISO 8601 timestamps missing the `Z` UTC suffix.
+  </Accordion>
+
+  <Accordion title="401 Unauthorized">
+    **What it means:** The Bearer token is absent, malformed, or expired.
+
+    **What to do:**
+    - Re-authenticate via `POST /auth/login` to get a fresh token.
+    - Double-check the `Authorization` header format: it must be `Bearer <token>` with exactly one space and no extra punctuation.
+    - If a service account token is being used in an automated script, ensure the script refreshes the token before it expires (default TTL: 3,600 seconds).
+  </Accordion>
+
+  <Accordion title="403 Forbidden">
+    **What it means:** Your account is authenticated but lacks the permission needed to perform the requested action. Common for system administration endpoints if your account is not a `system:admin`.
+
+    **What to do:**
+    - Confirm your account's role in the relevant workspace via `GET /api/workspaces/:workspaceId/permissions`.
+    - For system-level endpoints (`/api/system/*`), contact your Tenant Admin to elevate your platform role.
+    - Do not retry the same call — it will continue to fail until your permissions are updated.
+  </Accordion>
+
+  <Accordion title="404 Not Found">
+    **What it means:** The resource identified by the URL path does not exist. This often means an ID is incorrect, stale, or belongs to a different workspace than your token has access to.
+
+    **What to do:**
+    - List the resource collection (e.g., `GET /api/remote-hand-agent`) to verify the ID you're using is present.
+    - Confirm the workspace context — IDs are scoped per workspace and are not globally unique across tenants.
+    - If the resource was recently deleted, re-create it or obtain the new ID from the team that performed the deletion.
+  </Accordion>
+
+  <Accordion title="422 Unprocessable Entity">
+    **What it means:** The request body is structurally valid but contains logical errors — for example, referencing a `workspaceId` that doesn't exist, or supplying a `gatewayId` that belongs to a different workspace.
+
+    **What to do:**
+    - Verify all referenced IDs (`workspaceId`, `gatewayId`, `roleId`, etc.) exist and belong to the same workspace.
+    - Inspect the `message` field in the response for a human-readable explanation.
+    - Cross-reference IDs using the corresponding list endpoints.
+  </Accordion>
+
+  <Accordion title="500 Internal Server Error">
+    **What it means:** An unexpected error occurred on the N-Gate platform side. This is not caused by your request.
+
+    **What to do:**
+    - Note the `requestId` field in the response body — you'll need this when contacting N-Gate support.
+    - Retry the request once after a brief delay (30–60 seconds). Transient `500` errors caused by brief platform restarts often self-resolve.
+    - If the error persists across multiple retries, open a support ticket with the `requestId`, the full request you sent (redact the token), and the timestamp.
+  </Accordion>
+
+  <Accordion title="502 Bad Gateway">
+    **What it means:** N-Gate reached the proxy layer but could not connect to the upstream service behind the route.
+
+    **What to do:**
+    - Verify the upstream service is running and reachable from N-Gate's network.
+    - Check the route's `target` URL via `GET /api/routes` — a misconfigured URL is the leading cause of `502` errors.
+    - Ensure no firewall or security group rule is blocking egress from N-Gate to the upstream host.
+    - If the upstream is a remote-hand agent endpoint, confirm the agent's `status` is `active` via `GET /api/remote-hand-agent`.
+  </Accordion>
+
+  <Accordion title="503 Service Unavailable">
+    **What it means:** N-Gate itself, or a critical dependency, is temporarily unavailable. This can also occur when a remote-hand agent is marked `inactive` but traffic is still being routed to it.
+
+    **What to do:**
+    - Check the [N-Gate Status Page](https://status.n-gate.io) for active incidents.
+    - If the error coincides with a recent agent update, verify the agent is `active` via `GET /api/remote-hand-agent`.
+    - Wait for the incident to resolve, or re-route traffic to an alternative agent if one is available.
+  </Accordion>
+
+  <Accordion title="504 Gateway Timeout">
+    **What it means:** N-Gate forwarded the request to the upstream service but did not receive a response within the allowed time window.
+
+    **What to do:**
+    - Investigate whether the upstream service is under unusually high load.
+    - Check airtime transaction logs for a spike in slow transactions around the same time.
+    - If the upstream consistently times out, consider optimising the upstream endpoint or requesting a higher timeout threshold from your N-Gate platform administrator.
+  </Accordion>
+
+</AccordionGroup>
+
+---
+
+## Quick Reference
+
+| Task | Method | Endpoint |
+|---|---|---|
+| List transactions | `GET` | `/api/airtime-transactions` |
+| List agents | `GET` | `/api/remote-hand-agent` |
+| Register agent | `POST` | `/api/remote-hand-agent` |
+| Update agent | `PUT` | `/api/remote-hand-agent/:id` |
+| Upload system config | `POST` | `/api/system/config` |
+| Regenerate SSL cert | `POST` | `/api/system/ssl/regenerate` |

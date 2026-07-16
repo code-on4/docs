@@ -1,0 +1,225 @@
+---
+title: "Permissions API — Control Workspace Access Roles"
+sidebarTitle: "Permissions"
+description: "List, update, and remove role assignments within an N-Gate workspace to enforce fine-grained member access control."
+---
+
+Permissions in N-Gate represent the binding between a workspace member and a role. Each permission record ties a specific user (`userId`) to a role (`roleId`) within a workspace, governing what actions that user may perform. The Permissions API lets workspace owners and admins inspect current role assignments, promote or demote members by swapping their role, and revoke access entirely by deleting a permission.
+
+---
+
+## List Workspace Permissions
+
+<br />
+
+`GET /api/workspaces/:workspaceId/permissions`
+
+Returns all permission assignments for the specified workspace. Each entry describes one member's role binding.
+
+### Path Parameters
+
+<ParamField path="workspaceId" type="string" required>
+  The unique identifier of the workspace whose permissions you want to list.
+</ParamField>
+
+### Response
+
+Returns an array of permission objects.
+
+<ResponseField name="permissionId" type="string">
+  The unique identifier for this permission assignment.
+</ResponseField>
+
+<ResponseField name="userId" type="string">
+  The unique identifier of the user this permission is assigned to.
+</ResponseField>
+
+<ResponseField name="roleId" type="string">
+  The role assigned to the user within this workspace (e.g. `role_admin`, `role_viewer`).
+</ResponseField>
+
+<ResponseField name="workspaceId" type="string">
+  The workspace this permission belongs to.
+</ResponseField>
+
+<ResponseField name="createdAt" type="string (ISO 8601)">
+  Timestamp of when this permission was originally created.
+</ResponseField>
+
+<Note>
+  This endpoint returns all non-owner permission records. The workspace owner's access is implicit and does not appear in this list.
+</Note>
+
+### Example
+
+<CodeGroup>
+```bash cURL
+curl --request GET \
+  --url "https://api.n-gate.io/api/workspaces/ws_01hx9zt3m5kbf2qp/permissions" \
+  --header "Authorization: Bearer <token>"
+```
+
+```json Response
+[
+  {
+    "permissionId": "perm_01hxajk3m5kbf2qr",
+    "userId": "usr_01hxajk9r7ncd4lw",
+    "roleId": "role_admin",
+    "workspaceId": "ws_01hx9zt3m5kbf2qp",
+    "createdAt": "2024-03-20T09:15:00Z"
+  },
+  {
+    "permissionId": "perm_01hxajk7p9mdf3st",
+    "userId": "usr_01hxajkbq1oeg5mu",
+    "roleId": "role_viewer",
+    "workspaceId": "ws_01hx9zt3m5kbf2qp",
+    "createdAt": "2024-04-02T14:30:00Z"
+  }
+]
+```
+</CodeGroup>
+
+---
+
+## Update a Member's Role
+
+<br />
+
+`PUT /api/workspaces/:workspaceId/permissions`
+
+Updates the role assigned to an existing workspace member. Use this to promote a viewer to admin, or demote an admin to a more restricted role.
+
+### Path Parameters
+
+<ParamField path="workspaceId" type="string" required>
+  The unique identifier of the workspace containing the permission to update.
+</ParamField>
+
+### Request Body
+
+<ParamField body="permissionId" type="string" required>
+  The unique identifier of the permission record to update.
+</ParamField>
+
+<ParamField body="roleId" type="string" required>
+  The new role to assign to the user. Must be a valid role ID within your N-Gate account.
+</ParamField>
+
+### Response
+
+<ResponseField name="permissionId" type="string">
+  The unique identifier of the updated permission record.
+</ResponseField>
+
+<ResponseField name="userId" type="string">
+  The user whose role was updated.
+</ResponseField>
+
+<ResponseField name="roleId" type="string">
+  The newly assigned role ID.
+</ResponseField>
+
+<ResponseField name="workspaceId" type="string">
+  The workspace this permission belongs to.
+</ResponseField>
+
+<ResponseField name="updatedAt" type="string (ISO 8601)">
+  Timestamp of when the permission was last updated.
+</ResponseField>
+
+<Warning>
+  Only workspace **Owners** and **Admins** are authorized to update permissions. Attempting this as a lower-privileged role returns `403 Forbidden`. You cannot change the role of the workspace Owner.
+</Warning>
+
+### Example
+
+<CodeGroup>
+```bash cURL
+curl --request PUT \
+  --url "https://api.n-gate.io/api/workspaces/ws_01hx9zt3m5kbf2qp/permissions" \
+  --header "Authorization: Bearer <token>" \
+  --header "Content-Type: application/json" \
+  --data '{
+    "permissionId": "perm_01hxajk7p9mdf3st",
+    "roleId": "role_admin"
+  }'
+```
+
+```json Response
+{
+  "permissionId": "perm_01hxajk7p9mdf3st",
+  "userId": "usr_01hxajkbq1oeg5mu",
+  "roleId": "role_admin",
+  "workspaceId": "ws_01hx9zt3m5kbf2qp",
+  "updatedAt": "2024-06-10T11:45:00Z"
+}
+```
+</CodeGroup>
+
+---
+
+## Remove a Permission
+
+<br />
+
+`DELETE /api/workspaces/:workspaceId/permissions/:permissionId`
+
+Permanently removes a permission assignment, revoking the associated user's access to the workspace.
+
+### Path Parameters
+
+<ParamField path="workspaceId" type="string" required>
+  The unique identifier of the workspace containing the permission.
+</ParamField>
+
+<ParamField path="permissionId" type="string" required>
+  The unique identifier of the permission record to delete.
+</ParamField>
+
+### Response
+
+<ResponseField name="message" type="string">
+  A confirmation string. Returns `"Permission removed"` on success.
+</ResponseField>
+
+<Warning>
+  This action is **irreversible**. Once deleted, the user will immediately lose access to the workspace. If re-access is needed, you must send a new invitation or create a new permission manually.
+</Warning>
+
+### Example
+
+<CodeGroup>
+```bash cURL
+curl --request DELETE \
+  --url "https://api.n-gate.io/api/workspaces/ws_01hx9zt3m5kbf2qp/permissions/perm_01hxajk7p9mdf3st" \
+  --header "Authorization: Bearer <token>"
+```
+
+```json Response
+{
+  "message": "Permission removed"
+}
+```
+</CodeGroup>
+
+---
+
+## Error Responses
+
+All Permissions API errors follow the standard N-Gate error shape:
+
+```json
+{
+  "error": "Permission not found",
+  "statusCode": 404,
+  "timestamp": "2024-06-01T12:00:00Z"
+}
+```
+
+| Status Code | Meaning                                                           |
+|-------------|-------------------------------------------------------------------|
+| `400`       | Missing or invalid fields in the request body                     |
+| `401`       | Missing or invalid `Authorization` token                          |
+| `403`       | Caller lacks sufficient role to manage permissions                |
+| `404`       | The specified `workspaceId` or `permissionId` does not exist      |
+| `409`       | Attempted to modify the Owner's permission record                 |

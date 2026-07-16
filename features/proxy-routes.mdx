@@ -1,0 +1,251 @@
+---
+title: "Proxy Routes: Dynamic API Endpoints in N-Gate"
+sidebarTitle: "Proxy Routes"
+description: "Define, manage, and proxy API routes through N-Gate to route traffic from a single gateway to any upstream service you control."
+---
+
+Proxy Routes are the core traffic-routing primitive in N-Gate. Each route binds a public-facing path and HTTP method to an upstream URL, letting you expose a clean, versioned API surface while keeping your internal services hidden behind the gateway. Once a route exists, you can forward live requests through it in a single API call — N-Gate handles the hop to the upstream and passes the response back to you.
+
+## Route object
+
+| Field | Type | Description |
+|---|---|---|
+| `id` | string | Unique route identifier, auto-generated on creation |
+| `path` | string | The URL path exposed by N-Gate (e.g. `/api/v1/payments`) |
+| `target` | string | The upstream URL N-Gate forwards matching requests to |
+| `method` | string | HTTP method this route handles (`GET`, `POST`, `PUT`, `DELETE`, etc.) |
+| `workspaceId` | string | Workspace this route belongs to |
+| `createdAt` | string | ISO 8601 timestamp of route creation |
+
+---
+
+## Create a route
+
+Register a new route that maps an N-Gate path to an upstream service.
+
+### Endpoint
+
+```
+POST /api/routes
+```
+
+### Request body
+
+<ParamField body="path" type="string" required>
+  The path N-Gate will expose. Must start with `/`. Example: `/api/v1/payments`.
+</ParamField>
+
+<ParamField body="target" type="string" required>
+  The full upstream URL to which N-Gate forwards matched requests. Example: `https://payments.internal.io`.
+</ParamField>
+
+<ParamField body="method" type="string" required>
+  The HTTP method for this route. Accepted values: `GET`, `POST`, `PUT`, `PATCH`, `DELETE`.
+</ParamField>
+
+<ParamField body="workspaceId" type="string" required>
+  The workspace this route belongs to.
+</ParamField>
+
+### Example
+
+```bash
+curl -X POST "https://api.n-gate.io/api/routes" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "path": "/api/v1/payments",
+    "target": "https://payments.internal.io",
+    "method": "POST",
+    "workspaceId": "ws_123"
+  }'
+```
+
+### Response
+
+```json
+{
+  "id": "route_abc",
+  "path": "/api/v1/payments",
+  "target": "https://payments.internal.io",
+  "method": "POST",
+  "workspaceId": "ws_123",
+  "createdAt": "2024-01-15T10:00:00Z"
+}
+```
+
+<Tip>
+  Save the returned `id` immediately — you'll need it as the `routeId` when proxying requests or deleting the route later.
+</Tip>
+
+---
+
+## List routes
+
+Retrieve all routes registered in your workspace to inspect paths, targets, and methods.
+
+### Endpoint
+
+```
+GET /api/routes
+```
+
+### Example
+
+```bash
+curl -X GET "https://api.n-gate.io/api/routes" \
+  -H "Authorization: Bearer <token>"
+```
+
+### Response
+
+```json
+[
+  {
+    "id": "route_abc",
+    "path": "/api/v1/payments",
+    "target": "https://payments.internal.io",
+    "method": "POST",
+    "workspaceId": "ws_123",
+    "createdAt": "2024-01-15T10:00:00Z"
+  }
+]
+```
+
+---
+
+## Proxy a request
+
+Forward a live request through a registered route. N-Gate resolves the route's target URL, forwards the payload, and returns the upstream response to the caller.
+
+### Endpoint
+
+```
+POST /api/routes/proxy
+```
+
+### Request body
+
+<ParamField body="routeId" type="string" required>
+  The `id` of the route to proxy the request through.
+</ParamField>
+
+<ParamField body="payload" type="object">
+  Optional request body to forward to the upstream service. Omit for routes that don't expect a body.
+</ParamField>
+
+### Example
+
+```bash
+curl -X POST "https://api.n-gate.io/api/routes/proxy" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "routeId": "route_abc",
+    "payload": {
+      "amount": 500,
+      "currency": "USD"
+    }
+  }'
+```
+
+### Response
+
+The proxy endpoint returns the upstream service's response body verbatim, with the upstream HTTP status code. For example:
+
+```json
+{
+  "transactionId": "txn_99z",
+  "status": "accepted",
+  "amount": 500,
+  "currency": "USD"
+}
+```
+
+<Note>
+  N-Gate passes upstream HTTP status codes (2xx, 4xx, 5xx) through to your client unchanged. If the upstream is unreachable, N-Gate returns a `502 Bad Gateway` with an error message.
+</Note>
+
+---
+
+## Delete a route
+
+Remove a route permanently. In-flight proxy requests using this route will fail after deletion.
+
+### Endpoint
+
+```
+DELETE /api/routes/:id
+```
+
+### Example
+
+```bash
+curl -X DELETE "https://api.n-gate.io/api/routes/route_abc" \
+  -H "Authorization: Bearer <token>"
+```
+
+<Warning>
+  Deleting a route is irreversible. Any application that relies on proxying through `route_abc` will receive errors immediately. Verify no active consumers depend on the route before deleting it.
+</Warning>
+
+---
+
+## Full route lifecycle
+
+<Steps>
+  <Step title="Create the route">
+    POST your desired `path`, `target`, `method`, and `workspaceId` to `/api/routes`. Store the returned `id`.
+  </Step>
+  <Step title="Verify via list">
+    Call `GET /api/routes` and confirm your new route appears with the correct `path` and `target`.
+  </Step>
+  <Step title="Proxy a test request">
+    Send a proxy request with the `routeId` and a sample `payload` to validate end-to-end connectivity with your upstream.
+  </Step>
+  <Step title="Integrate into your application">
+    Update your application to call `POST /api/routes/proxy` with the appropriate `routeId` for each upstream interaction.
+  </Step>
+  <Step title="Delete when no longer needed">
+    Call `DELETE /api/routes/:id` to remove routes that are no longer in use and keep your workspace clean.
+  </Step>
+</Steps>
+
+---
+
+## Common patterns
+
+<Tabs>
+  <Tab title="Single upstream per route">
+    Map one `path` to one `target`. This is the simplest setup and works well when each route corresponds to a distinct microservice.
+
+    ```json
+    {
+      "path": "/api/v1/inventory",
+      "target": "https://inventory.internal.io",
+      "method": "GET",
+      "workspaceId": "ws_123"
+    }
+    ```
+  </Tab>
+  <Tab title="Multiple methods, same upstream">
+    Create separate routes for each HTTP method pointing at the same `target`. This lets you apply different access policies per method.
+
+    ```json
+    [
+      { "path": "/api/v1/orders", "target": "https://orders.internal.io", "method": "GET" },
+      { "path": "/api/v1/orders", "target": "https://orders.internal.io", "method": "POST" }
+    ]
+    ```
+  </Tab>
+  <Tab title="Versioned API surface">
+    Use path versioning (`/api/v1/`, `/api/v2/`) to route traffic to different upstream versions simultaneously, enabling gradual migrations.
+
+    ```json
+    [
+      { "path": "/api/v1/users", "target": "https://users-v1.internal.io", "method": "GET" },
+      { "path": "/api/v2/users", "target": "https://users-v2.internal.io", "method": "GET" }
+    ]
+    ```
+  </Tab>
+</Tabs>

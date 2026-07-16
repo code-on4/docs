@@ -1,0 +1,198 @@
+---
+title: "Gateway Consumers: API Client Management in N-Gate"
+sidebarTitle: "Gateway Consumers"
+description: "Register and manage the API clients authorized to call through your N-Gate gateways, with one consumer per application for clean access control."
+---
+
+A Gateway Consumer represents a single API client — such as a microservice, a third-party integration, or a frontend application — that is authorized to send traffic through a specific N-Gate gateway. By registering each client as its own consumer, you gain fine-grained control over which applications can reach which upstream gateways, and you can revoke access for a single client without affecting any others.
+
+## Consumer object
+
+| Field | Type | Description |
+|---|---|---|
+| `id` | string | Unique consumer identifier, auto-generated on creation |
+| `name` | string | Human-readable label for the consumer (e.g. `Payment Service Client`) |
+| `gatewayId` | string | The gateway this consumer is authorized to call through |
+| `workspaceId` | string | Workspace this consumer belongs to |
+| `createdAt` | string | ISO 8601 timestamp of consumer creation |
+
+---
+
+## Create a consumer
+
+Register a new API client and bind it to a specific gateway within your workspace.
+
+### Endpoint
+
+```
+POST /api/gateway-consumer
+```
+
+### Request body
+
+<ParamField body="name" type="string" required>
+  A descriptive name for the consumer. Use the name of the application or service it represents (e.g. `Payment Service Client`).
+</ParamField>
+
+<ParamField body="gatewayId" type="string" required>
+  The ID of the gateway this consumer is authorized to access.
+</ParamField>
+
+<ParamField body="workspaceId" type="string" required>
+  The workspace in which to create this consumer.
+</ParamField>
+
+### Example
+
+```bash
+curl -X POST "https://api.n-gate.io/api/gateway-consumer" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Payment Service Client",
+    "gatewayId": "gw_xyz",
+    "workspaceId": "ws_123"
+  }'
+```
+
+### Response
+
+```json
+{
+  "id": "consumer_abc",
+  "name": "Payment Service Client",
+  "gatewayId": "gw_xyz",
+  "workspaceId": "ws_123",
+  "createdAt": "2024-01-15T10:00:00Z"
+}
+```
+
+<Tip>
+  Store the returned `id` in your application's configuration. You'll reference it when listing consumers for audits or when deleting a consumer to revoke access.
+</Tip>
+
+---
+
+## List consumers
+
+Retrieve all consumers in your workspace, optionally filtered by `workspaceId`, to audit which applications have gateway access.
+
+### Endpoint
+
+```
+GET /api/gateway-consumer
+```
+
+### Query parameters
+
+<ParamField query="workspaceId" type="string">
+  Filter the results to consumers that belong to this workspace.
+</ParamField>
+
+### Example
+
+```bash
+curl -X GET "https://api.n-gate.io/api/gateway-consumer?workspaceId=ws_123" \
+  -H "Authorization: Bearer <token>"
+```
+
+### Response
+
+```json
+[
+  {
+    "id": "consumer_abc",
+    "name": "Payment Service Client",
+    "gatewayId": "gw_xyz",
+    "workspaceId": "ws_123",
+    "createdAt": "2024-01-15T10:00:00Z"
+  }
+]
+```
+
+<Note>
+  Without a `workspaceId` filter, the endpoint returns consumers across all workspaces your token has access to. Filter explicitly in multi-workspace environments to avoid ambiguous results.
+</Note>
+
+---
+
+## Delete a consumer
+
+Permanently remove a consumer and revoke its access to the associated gateway.
+
+### Endpoint
+
+```
+DELETE /api/gateway-consumer/:id
+```
+
+### Example
+
+```bash
+curl -X DELETE "https://api.n-gate.io/api/gateway-consumer/consumer_abc" \
+  -H "Authorization: Bearer <token>"
+```
+
+<Warning>
+  Deleting a consumer immediately revokes its gateway access. Any application still using this consumer will have its requests rejected. Coordinate with application owners before removing a consumer in a production environment.
+</Warning>
+
+---
+
+## Consumer management workflow
+
+<Steps>
+  <Step title="Identify the application">
+    Determine which application or service needs gateway access and confirm the `gatewayId` it should call through.
+  </Step>
+  <Step title="Create the consumer">
+    POST to `/api/gateway-consumer` with a descriptive `name`, the target `gatewayId`, and your `workspaceId`. Save the returned `id`.
+  </Step>
+  <Step title="Configure the application">
+    Supply the `consumer_id` and your N-Gate Bearer token to the application so it can authenticate its gateway calls.
+  </Step>
+  <Step title="Audit periodically">
+    List consumers regularly and remove any that belong to decommissioned or deprecated applications.
+  </Step>
+  <Step title="Revoke on decommission">
+    When retiring an application, call `DELETE /api/gateway-consumer/:id` to cut off its gateway access immediately.
+  </Step>
+</Steps>
+
+---
+
+## Use cases
+
+<CardGroup cols={2}>
+  <Card title="Microservice isolation" icon="cubes">
+    Register one consumer per microservice. If a service is compromised, you revoke only its consumer without touching any other service's access.
+  </Card>
+  <Card title="Third-party integrations" icon="plug">
+    Create dedicated consumers for external partners or SaaS integrations so you can track their usage separately and revoke access without impacting internal services.
+  </Card>
+  <Card title="Environment separation" icon="layer-group">
+    Create distinct consumers for development, staging, and production environments pointing at their respective gateways, preventing cross-environment traffic leakage.
+  </Card>
+  <Card title="Temporary access" icon="clock">
+    Issue a consumer for short-lived integrations (e.g. a data migration job) and delete it as soon as the job completes, minimising your attack surface.
+  </Card>
+</CardGroup>
+
+---
+
+## Best practices
+
+<AccordionGroup>
+  <Accordion title="One consumer per application">
+    Never share a single consumer across multiple applications or services. Sharing consumers makes it impossible to attribute traffic to a specific application and means revoking one application's access inadvertently revokes all applications using that consumer.
+  </Accordion>
+  <Accordion title="Use descriptive names">
+    Choose names that clearly identify the application and its environment, such as `Inventory Service – Production` or `Analytics Dashboard – Staging`. Vague names like `test` or `client1` create confusion during audits and incident response.
+  </Accordion>
+  <Accordion title="Audit consumers on a schedule">
+    List all consumers monthly and cross-reference them with your active services inventory. Delete any consumer that no longer corresponds to a running application.
+  </Accordion>
+  <Accordion title="Never share consumer credentials">
+    Treat consumer IDs and the tokens associated with them as secrets. Store them in a secrets manager (e.g. HashiCorp Vault, AWS Secrets Manager) and never hard-code them in source code or configuration files committed to version control.
+  </Accordion>
+</AccordionGroup>

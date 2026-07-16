@@ -1,47 +1,254 @@
 ---
-title: "Quickstart"
-description: "Begin with a guide on the fastest path to a successful outcome"
+title: "Quick Start: Your First N-Gate API Request"
+sidebarTitle: "Quick Start"
+description: "Authenticate with N-Gate, create a Workspace, register a route, and make your first proxied API request — all in under five minutes."
 ---
 
-Describe how someone begins using your product. What is the first thing they need to do? Are there any prerequisites?
+This guide walks you through the four essential steps to start using N-Gate: obtaining a Bearer token, creating a Workspace, listing your routes, and sending a proxied request to an upstream service. By the end, you'll have a working end-to-end flow you can build on for your own integrations.
 
-A quickstart should take someone from zero to using your product. They'll get a quick win and a sense of what they can accomplish.
+<Note>
+  All requests in this guide use `https://api.n-gate.io` as the base URL. Make sure you have valid credentials before starting — contact your platform administrator if you don't have an account yet.
+</Note>
 
-## Prerequisites
-
-Before you begin, you must have:
-
-- Requirement one (for example, Node.js 18+, a free account, an API key)
-- Requirement two (for example, a compatible device, a compatible browser, a compatible operating system)
-
-## Get started
+---
 
 <Steps>
-  <Step title="Install">
-    Describe how to install your product or sign up.
 
-    ```bash
-    npm install your-package
-    ```
-  </Step>
-  <Step title="Configure">
-    Describe any setup or configuration needed before first use.
+  <Step title="Authenticate and Get Your Bearer Token">
 
-    ```bash
-    your-cli init
-    ```
-  </Step>
-  <Step title="Run it">
-    Show the first thing a user does to see it working.
+    Before you can call any N-Gate endpoint, you need a Bearer token. Send your credentials to `POST /auth/login` — this is the only endpoint that does **not** require an `Authorization` header.
 
-    ```bash
-    your-cli start
+    <CodeGroup>
+
+    ```bash curl
+    curl -X POST https://api.n-gate.io/auth/login \
+      -H "Content-Type: application/json" \
+      -d '{
+        "email": "admin@example.com",
+        "password": "your-password"
+      }'
     ```
+
+    </CodeGroup>
+
+    **Request body**
+
+    | Field      | Type   | Required | Description                        |
+    |------------|--------|----------|------------------------------------|
+    | `email`    | string | ✓        | The email address for your account |
+    | `password` | string | ✓        | Your account password              |
+
+    **Example response**
+
+    ```json
+    {
+      "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+      "user": {
+        "id": "usr_abc123",
+        "email": "admin@example.com"
+      }
+    }
+    ```
+
+    Copy the value of `token` — you'll include it as a `Bearer` token in the `Authorization` header for every subsequent request:
+
+    ```
+    Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+    ```
+
+    <Warning>
+      Treat your token like a password. Never log it, commit it to source control, or pass it as a URL query parameter. See the [Authentication guide](/authentication) for storage best practices.
+    </Warning>
+
   </Step>
+
+  <Step title="Create a Workspace">
+
+    A Workspace is the container for all your routes, gateways, and consumers. Create one by calling `POST /api/workspaces` with a name and optional description. Replace `<YOUR_TOKEN>` with the token you received in Step 1.
+
+    <CodeGroup>
+
+    ```bash curl
+    curl -X POST https://api.n-gate.io/api/workspaces \
+      -H "Content-Type: application/json" \
+      -H "Authorization: Bearer <YOUR_TOKEN>" \
+      -d '{
+        "name": "My Institution",
+        "description": "Primary workspace"
+      }'
+    ```
+
+    </CodeGroup>
+
+    **Request body**
+
+    | Field         | Type   | Required | Description                               |
+    |---------------|--------|----------|-------------------------------------------|
+    | `name`        | string | ✓        | A human-readable name for the Workspace   |
+    | `description` | string |          | An optional description of the Workspace  |
+
+    **Example response**
+
+    ```json
+    {
+      "id": "ws_abc123",
+      "name": "My Institution",
+      "description": "Primary workspace",
+      "createdAt": "2024-01-15T10:00:00Z"
+    }
+    ```
+
+    <Tip>
+      Save the returned `id` (e.g., `ws_abc123`). You'll reference it when creating routes and gateways scoped to this Workspace.
+    </Tip>
+
+  </Step>
+
+  <Step title="Create and List Your Routes">
+
+    Routes map an inbound API path to an upstream target service. First, create a route using `POST /api/routes`, then verify it exists by calling `GET /api/routes`.
+
+    **Create a route**
+
+    <CodeGroup>
+
+    ```bash curl
+    curl -X POST https://api.n-gate.io/api/routes \
+      -H "Content-Type: application/json" \
+      -H "Authorization: Bearer <YOUR_TOKEN>" \
+      -d '{
+        "path": "/api/v1/payments",
+        "target": "https://payments.internal.example.com",
+        "method": "POST"
+      }'
+    ```
+
+    </CodeGroup>
+
+    **Request body**
+
+    | Field    | Type   | Required | Description                                                 |
+    |----------|--------|----------|-------------------------------------------------------------|
+    | `path`   | string | ✓        | The inbound path N-Gate will match against incoming requests |
+    | `target` | string | ✓        | The full URL of the upstream service to forward requests to  |
+    | `method` | string | ✓        | The HTTP method this route handles (e.g., `GET`, `POST`)     |
+
+    **Example response**
+
+    ```json
+    {
+      "id": "route_xyz789",
+      "path": "/api/v1/payments",
+      "target": "https://payments.internal.example.com",
+      "method": "POST",
+      "workspaceId": "ws_abc123",
+      "createdAt": "2024-01-15T10:05:00Z"
+    }
+    ```
+
+    **List all routes**
+
+    Once created, you can retrieve all routes in your Workspace:
+
+    <CodeGroup>
+
+    ```bash curl
+    curl -X GET https://api.n-gate.io/api/routes \
+      -H "Authorization: Bearer <YOUR_TOKEN>"
+    ```
+
+    </CodeGroup>
+
+    **Example response**
+
+    ```json
+    {
+      "routes": [
+        {
+          "id": "route_xyz789",
+          "path": "/api/v1/payments",
+          "target": "https://payments.internal.example.com",
+          "method": "POST",
+          "workspaceId": "ws_abc123",
+          "createdAt": "2024-01-15T10:05:00Z"
+        }
+      ],
+      "total": 1
+    }
+    ```
+
+    <Note>
+      Copy the `id` field from the created route (e.g., `route_xyz789`). You'll need it in the next step to send a proxied request.
+    </Note>
+
+  </Step>
+
+  <Step title="Make Your First Proxied Request">
+
+    With a route registered, you can now send a proxied request through N-Gate using `POST /api/routes/proxy`. N-Gate will authenticate the request, match it to the route, and forward the `payload` to your upstream target — keeping the internal target URL hidden from the caller.
+
+    <CodeGroup>
+
+    ```bash curl
+    curl -X POST https://api.n-gate.io/api/routes/proxy \
+      -H "Content-Type: application/json" \
+      -H "Authorization: Bearer <YOUR_TOKEN>" \
+      -d '{
+        "routeId": "route_xyz789",
+        "payload": {
+          "amount": 100
+        }
+      }'
+    ```
+
+    </CodeGroup>
+
+    **Request body**
+
+    | Field     | Type   | Required | Description                                                              |
+    |-----------|--------|----------|--------------------------------------------------------------------------|
+    | `routeId` | string | ✓        | The `id` of the route to proxy this request through                      |
+    | `payload` | object | ✓        | The request body to forward to the upstream service                      |
+
+    **Example response**
+
+    The response body is passed through directly from your upstream service. For example:
+
+    ```json
+    {
+      "status": "success",
+      "transactionId": "txn_001abc",
+      "amount": 100,
+      "currency": "USD",
+      "processedAt": "2024-01-15T10:10:00Z"
+    }
+    ```
+
+    <Tip>
+      If the proxy request fails with a `404`, double-check that the `routeId` matches the `id` returned when you created the route, and that the route belongs to the same Workspace your token is scoped to.
+    </Tip>
+
+  </Step>
+
 </Steps>
 
-<Tip>
-  Give people a way to get help. This could be a link to a support page, a chat with a customer support agent, or a forum for your product.
+---
 
-  Example: Need help? Reach out to us at [support@yourcompany.com](mailto:support@yourcompany.com).
-</Tip>
+## What's Next?
+
+You've completed the core N-Gate flow. Here's where to go depending on what you want to build next:
+
+<CardGroup cols={2}>
+  <Card title="Authentication Deep Dive" icon="lock" href="/authentication">
+    Understand token expiry, error handling, and security best practices for managing Bearer tokens.
+  </Card>
+  <Card title="Gateways & Consumers" icon="shield" href="/features/gateway-consumers">
+    Group your routes into Gateways and control which consumers can access them.
+  </Card>
+  <Card title="Financial Transactions" icon="credit-card" href="/features/mandates">
+    Create mandates and query your airtime transaction ledger for reconciliation.
+  </Card>
+  <Card title="Remote Hand Agents" icon="server" href="/features/remote-hand-agents">
+    Register remote agents and manage distributed infrastructure operations.
+  </Card>
+</CardGroup>

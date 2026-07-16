@@ -1,0 +1,201 @@
+---
+title: "N-Gate REST API Reference Overview"
+sidebarTitle: "Overview"
+description: "Explore the N-Gate REST API: base URL, authentication, request and response formats, error codes, rate limiting, and endpoint groups."
+---
+
+The N-Gate REST API gives you programmatic access to every capability of the N-Gate platform — from managing multi-tenant workspaces and defining proxy routes to controlling remote hand agents and processing mandate documents. All resources are available over HTTPS at a single base URL, and every response is structured JSON, making integration straightforward regardless of the language or toolchain you choose.
+
+## Base URL
+
+Every API request targets the following base URL:
+
+```
+https://api.n-gate.io
+```
+
+Versioned resource endpoints are mounted under the `/api/` path prefix (for example, `https://api.n-gate.io/api/workspaces`). The authentication endpoint at `/auth/login` is the sole exception that sits outside this prefix.
+
+<Note>
+  Always use HTTPS. Plain HTTP requests are rejected. If you are testing locally via a reverse proxy, ensure TLS termination is in place before traffic reaches N-Gate.
+</Note>
+
+## Authentication
+
+All endpoints **except** `POST /auth/login` require a valid Bearer token in the `Authorization` header:
+
+```http
+Authorization: Bearer <your-token>
+```
+
+You obtain a token by calling `POST /auth/login` with your credentials. Tokens are time-limited; once they expire, any request returns a `401 Unauthorized` response and you must re-authenticate.
+
+<Tip>
+  See the [Authentication](/api-reference/authentication) page for a full walkthrough of the login flow, token usage, and re-authentication examples in curl, JavaScript, and Python.
+</Tip>
+
+## Request Format
+
+<CardGroup cols={2}>
+  <Card title="JSON Requests" icon="brackets-curly">
+    Set `Content-Type: application/json` and send a JSON body for all `POST`, `PUT`, and `PATCH` requests that carry a payload.
+  </Card>
+  <Card title="File Upload Requests" icon="file-arrow-up">
+    File upload endpoints expect `Content-Type: multipart/form-data`. Do **not** set this header manually — let your HTTP client set it along with the correct boundary string.
+  </Card>
+</CardGroup>
+
+A typical request with a JSON body looks like this:
+
+```http
+POST /api/workspaces HTTP/1.1
+Host: api.n-gate.io
+Authorization: Bearer eyJhbGci...
+Content-Type: application/json
+
+{
+  "name": "acme-corp",
+  "plan": "enterprise"
+}
+```
+
+## Standard Response Format
+
+### List Responses
+
+Endpoints that return collections wrap results in a `data` array alongside a `pagination` object:
+
+```json
+{
+  "data": [
+    { "id": "ws_abc123", "name": "acme-corp" }
+  ],
+  "pagination": {
+    "page": 1,
+    "limit": 20,
+    "total": 100
+  }
+}
+```
+
+<ResponseField name="data" type="array" required>
+  The array of resource objects matching the request.
+</ResponseField>
+
+<ResponseField name="pagination" type="object" required>
+  Pagination metadata for the current page of results.
+
+  <Expandable title="pagination fields">
+    <ResponseField name="pagination.page" type="integer" required>
+      The current page number (1-indexed).
+    </ResponseField>
+    <ResponseField name="pagination.limit" type="integer" required>
+      Maximum number of records returned per page.
+    </ResponseField>
+    <ResponseField name="pagination.total" type="integer" required>
+      Total number of records matching the query across all pages.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+### Singular Responses
+
+Single-resource endpoints return the resource object directly at the top level without a `data` wrapper.
+
+## Error Response Format
+
+When a request cannot be fulfilled, N-Gate returns a structured error object so your application can handle failures programmatically:
+
+```json
+{
+  "error": "Invalid credentials",
+  "statusCode": 401,
+  "timestamp": "2024-01-15T10:00:00Z"
+}
+```
+
+<ResponseField name="error" type="string" required>
+  A human-readable message describing what went wrong.
+</ResponseField>
+
+<ResponseField name="statusCode" type="integer" required>
+  The HTTP status code, mirrored in the response body for convenience.
+</ResponseField>
+
+<ResponseField name="timestamp" type="string" required>
+  ISO 8601 UTC timestamp of when the error occurred.
+</ResponseField>
+
+### Error Code Reference
+
+| Status Code | Name | When It Occurs |
+|---|---|---|
+| `400` | Bad Request | The request is malformed or contains invalid parameter values. |
+| `401` | Unauthorized | No token was provided, the token is invalid, or the token has expired. |
+| `403` | Forbidden | The authenticated user does not have permission to access the resource. |
+| `404` | Not Found | The requested resource does not exist. |
+| `422` | Unprocessable Entity | The request is well-formed but fails validation (e.g., a required field is missing). |
+| `429` | Too Many Requests | You have exceeded the rate limit. See the `Retry-After` header. |
+| `500` | Internal Server Error | An unexpected condition occurred on the server. |
+
+<Warning>
+  A `403 Forbidden` response means your token is valid but your role or workspace permissions are insufficient. Check with your workspace administrator to ensure the correct permissions have been granted.
+</Warning>
+
+## Rate Limiting
+
+N-Gate enforces rate limits to protect platform stability. When you exceed the limit, the API responds with `429 Too Many Requests` and includes a `Retry-After` header indicating how many seconds to wait before retrying:
+
+```http
+HTTP/1.1 429 Too Many Requests
+Retry-After: 30
+Content-Type: application/json
+
+{
+  "error": "Rate limit exceeded",
+  "statusCode": 429,
+  "timestamp": "2024-01-15T10:00:00Z"
+}
+```
+
+<Tip>
+  Implement exponential back-off in your integration and respect the `Retry-After` value to avoid sustained throttling.
+</Tip>
+
+## Versioning
+
+The current API generation is accessed through the `/api/` path prefix on every resource endpoint. Breaking changes will be introduced under a new versioned prefix (for example, `/api/v2/`) and announced in advance, so your existing integrations on the current prefix continue to work uninterrupted.
+
+## Endpoint Groups
+
+The table below summarises every major endpoint group available in the N-Gate API. Click a group name to jump to its dedicated reference page.
+
+<CardGroup cols={2}>
+  <Card title="/auth" icon="key" href="/api-reference/authentication">
+    **Authentication** — Obtain and manage Bearer tokens. The `POST /auth/login` endpoint is the entry point for all API access.
+  </Card>
+  <Card title="/api/workspaces" icon="building" href="/api-reference/workspaces">
+    **Workspace Management** — Create, read, update, and delete multi-tenant workspaces, and manage workspace membership and settings.
+  </Card>
+  <Card title="/api/routes" icon="route" href="/api-reference/routes">
+    **Route Definitions & Proxy** — Define upstream proxy routes, configure path rewriting, set headers, and control traffic forwarding behaviour.
+  </Card>
+  <Card title="/api/gateways" icon="server" href="/api-reference/gateways">
+    **Gateway Administration** — Provision and administer gateway instances, configure listeners, TLS policies, and gateway-level settings.
+  </Card>
+  <Card title="/api/gateway-consumer" icon="users" href="/api-reference/gateway-consumers">
+    **Consumer Management** — Register API consumers, manage API keys, and apply per-consumer rate limits and access policies.
+  </Card>
+  <Card title="/api/mandates" icon="file-contract" href="/api-reference/mandates">
+    **Mandate Document Processing** — Submit, track, and manage mandate documents for payment authorisation and compliance workflows.
+  </Card>
+  <Card title="/api/airtime-transactions" icon="signal" href="/api-reference/airtime">
+    **Telecom Airtime Transactions** — Initiate and query airtime top-up transactions across supported telecom operators.
+  </Card>
+  <Card title="/api/remote-hand-agent" icon="robot" href="/api-reference/remote-hand-agents">
+    **Remote Agent Control Plane** — Register, configure, and issue commands to remote hand agents running at edge locations.
+  </Card>
+  <Card title="/api/system" icon="gear" href="/api-reference/system-config">
+    **System Configuration & SSL** — Manage platform-wide configuration, SSL certificate provisioning, and system health endpoints.
+  </Card>
+</CardGroup>

@@ -1,13 +1,11 @@
 {
-  "$schema": "https://mintlify.com/docs.json",
+  "projectType": "api-service",
+  "projectName": "N-Gate",
+  "projectDescription": "N-Gate is a multi-tenant API Gateway, Infrastructure, and Integration Platform that proxies traffic, manages business mandates, and coordinates remote infrastructure agents across institutions.",
   "theme": "sequoia",
-  "name": "N-Gate",
-  "colors": {
-    "primary": "#ef7025",
-    "light": "#eec9bc",
-    "dark": "#4fa1ab"
-  },
-  "favicon": "/favicon.svg",
+  "primaryColor": "#ef7025",
+  "lightColor": "#eec9bc",
+  "darkColor": "#4fa1ab",
   "navigation": {
     "tabs": [
       {
@@ -108,20 +106,35 @@
       }
     ]
   },
-  "navbar": {
-    "links": [
-      {
-        "label": "Support",
-        "href": "mailto:support@n-gate.io"
-      }
-    ],
-    "primary": {
-      "type": "button",
-      "label": "Get Started",
-      "href": "/quickstart"
-    }
-  },
-  "footer": {
-    "socials": {}
-  }
+  "keyFeatures": [
+    "Multi-tenant workspace architecture with fine-grained permission roles",
+    "Dynamic API routing and secure request proxying to backend services",
+    "Gateway administration and API consumer management",
+    "Business mandate processing via document uploads",
+    "Telecom airtime transaction integration",
+    "Remote hardware/logical agent control plane",
+    "Dynamic SSL/TLS certificate management",
+    "Bearer token authentication across all protected endpoints"
+  ],
+  "publicApiSurface": [
+    "POST /auth/login",
+    "GET /api/workspaces",
+    "POST /api/workspaces",
+    "GET /api/workspaces/:workspaceId/permissions",
+    "POST /api/workspaces/:workspaceId/invite",
+    "GET /api/routes",
+    "POST /api/routes",
+    "POST /api/routes/proxy",
+    "GET /api/gateways",
+    "POST /api/gateways",
+    "GET /api/gateway-consumer",
+    "POST /api/gateway-consumer",
+    "POST /api/mandates",
+    "GET /api/airtime-transactions",
+    "GET /api/remote-hand-agent",
+    "POST /api/remote-hand-agent",
+    "PUT /api/remote-hand-agent/:id",
+    "POST /api/system/config",
+    "POST /api/system/ssl/regenerate"
+  ]
 }

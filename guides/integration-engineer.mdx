@@ -1,0 +1,393 @@
+---
+title: "Integration Engineer Setup Guide for N-Gate"
+sidebarTitle: "Integration Setup"
+description: "Register gateways, create consumers, define proxy routes, and test end-to-end proxied requests as an N-Gate integration engineer."
+---
+
+As an Integration Engineer, your job is to wire upstream services into N-Gate so that consumers can reach them through a unified, governed interface. This guide takes you from a fresh login all the way through registering a gateway, creating consumers, defining routes, and firing a live proxied request — with a troubleshooting section to help you resolve the issues that come up most often in the field.
+
+<Note>
+  All API calls target `https://api.n-gate.io`. Every request after authentication must include an `Authorization: Bearer <token>` header. Replace placeholder values such as `ws_01HX9ABCDE2FGHIJ` with the real IDs returned from your own API calls.
+</Note>
+
+## Prerequisites
+
+<CardGroup cols={2}>
+  <Card title="Workspace ID" icon="sitemap">
+    A workspace must already exist. Ask your Tenant Admin to create one or follow the [Tenant Administration Guide](/guides/tenant-admin).
+  </Card>
+  <Card title="Target Service URL" icon="globe">
+    The base URL of the upstream service you want to proxy through N-Gate (e.g., `https://payments.internal.example.com`).
+  </Card>
+  <Card title="Editor or Admin Role" icon="shield-check">
+    Your account needs at least `gateways:write` and `routes:write` permissions in the target workspace.
+  </Card>
+  <Card title="HTTP Client" icon="terminal">
+    `curl`, Postman, or any tool that can set request headers and send JSON bodies.
+  </Card>
+</CardGroup>
+
+---
+
+## Setup Workflow
+
+<Steps>
+
+  <Step title="Authenticate and Get a Bearer Token">
+    Every N-Gate API session starts with a login request. Send your credentials to `/auth/login` and extract the `token` from the response. You'll pass this token in every subsequent request.
+
+    <CodeGroup>
+    ```bash cURL
+    curl --request POST \
+      --url https://api.n-gate.io/auth/login \
+      --header 'Content-Type: application/json' \
+      --data '{
+        "username": "engineer@yourorg.example",
+        "password": "your-secure-password"
+      }'
+    ```
+
+    ```json Response
+    {
+      "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+      "expiresIn": 3600
+    }
+    ```
+    </CodeGroup>
+
+    <Tip>
+      Save the token to a shell variable so you can reuse it across all subsequent `curl` commands in this guide:
+      ```bash
+      TOKEN="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+      WORKSPACE_ID="ws_01HX9ABCDE2FGHIJ"
+      ```
+    </Tip>
+  </Step>
+
+  <Step title="Register an Upstream Gateway">
+    A **gateway** in N-Gate is a record that points to an upstream service. When you create one, you give it a human-readable name and the base URL of the service it represents. All routes and consumers you create in subsequent steps will be anchored to this gateway.
+
+    First, check whether a suitable gateway already exists for your workspace:
+
+    ```bash
+    curl --request GET \
+      --url https://api.n-gate.io/api/gateways \
+      --header "Authorization: Bearer $TOKEN"
+    ```
+
+    If you don't see one, create it now:
+
+    <CodeGroup>
+    ```bash cURL
+    curl --request POST \
+      --url https://api.n-gate.io/api/gateways \
+      --header "Authorization: Bearer $TOKEN" \
+      --header 'Content-Type: application/json' \
+      --data '{
+        "name": "Payments Service Gateway",
+        "url": "https://payments.internal.example.com",
+        "workspaceId": "ws_01HX9ABCDE2FGHIJ"
+      }'
+    ```
+
+    ```json Response
+    {
+      "id": "gw_02KYPQRST3UVWXYZ",
+      "name": "Payments Service Gateway",
+      "url": "https://payments.internal.example.com",
+      "workspaceId": "ws_01HX9ABCDE2FGHIJ",
+      "createdAt": "2025-01-15T10:00:00Z"
+    }
+    ```
+    </CodeGroup>
+
+    Save the gateway `id` — you'll need it when creating consumers and routes:
+
+    ```bash
+    GATEWAY_ID="gw_02KYPQRST3UVWXYZ"
+    ```
+
+    <Warning>
+      The `url` field must be a reachable base URL — no trailing slash, no path segments. N-Gate appends route paths to this URL at proxy time. An incorrect base URL is the most common cause of `502 Bad Gateway` errors.
+    </Warning>
+  </Step>
+
+  <Step title="Create API Consumers for the Gateway">
+    A **consumer** represents a client application or service that is authorized to send requests through a specific gateway. Consumers act as the identity layer for rate limiting, logging, and access policies. Create at least one consumer before defining routes.
+
+    List existing consumers to avoid duplicates:
+
+    ```bash
+    curl --request GET \
+      --url https://api.n-gate.io/api/gateway-consumer \
+      --header "Authorization: Bearer $TOKEN"
+    ```
+
+    Create a new consumer tied to your gateway:
+
+    <CodeGroup>
+    ```bash cURL
+    curl --request POST \
+      --url https://api.n-gate.io/api/gateway-consumer \
+      --header "Authorization: Bearer $TOKEN" \
+      --header 'Content-Type: application/json' \
+      --data '{
+        "name": "mobile-app-client",
+        "gatewayId": "gw_02KYPQRST3UVWXYZ",
+        "workspaceId": "ws_01HX9ABCDE2FGHIJ"
+      }'
+    ```
+
+    ```json Response
+    {
+      "id": "con_03LZABCDE4FGHIJK",
+      "name": "mobile-app-client",
+      "gatewayId": "gw_02KYPQRST3UVWXYZ",
+      "workspaceId": "ws_01HX9ABCDE2FGHIJ",
+      "createdAt": "2025-01-15T10:10:00Z"
+    }
+    ```
+    </CodeGroup>
+
+    <Tip>
+      Use descriptive consumer names that identify the client application, team, or environment — for example `"mobile-app-production"` or `"data-pipeline-staging"`. Clear names make audit logs significantly easier to interpret.
+    </Tip>
+
+    If you need to decommission a consumer later, delete it by its `id`:
+
+    ```bash
+    curl --request DELETE \
+      --url https://api.n-gate.io/api/gateway-consumer/con_03LZABCDE4FGHIJK \
+      --header "Authorization: Bearer $TOKEN"
+    ```
+  </Step>
+
+  <Step title="Define Proxy Routes">
+    A **route** maps an inbound path and HTTP method on N-Gate to a target upstream endpoint on your gateway. Once a route exists, any consumer can use it to make proxied requests. You can define as many routes as your integration requires.
+
+    List existing routes first to see what's already configured:
+
+    ```bash
+    curl --request GET \
+      --url https://api.n-gate.io/api/routes \
+      --header "Authorization: Bearer $TOKEN"
+    ```
+
+    Create a route for a specific upstream endpoint:
+
+    <CodeGroup>
+    ```bash POST /payments/charge
+    curl --request POST \
+      --url https://api.n-gate.io/api/routes \
+      --header "Authorization: Bearer $TOKEN" \
+      --header 'Content-Type: application/json' \
+      --data '{
+        "path": "/payments/charge",
+        "target": "https://payments.internal.example.com/v1/charge",
+        "method": "POST",
+        "workspaceId": "ws_01HX9ABCDE2FGHIJ"
+      }'
+    ```
+
+    ```bash GET /payments/status
+    curl --request POST \
+      --url https://api.n-gate.io/api/routes \
+      --header "Authorization: Bearer $TOKEN" \
+      --header 'Content-Type: application/json' \
+      --data '{
+        "path": "/payments/status",
+        "target": "https://payments.internal.example.com/v1/status",
+        "method": "GET",
+        "workspaceId": "ws_01HX9ABCDE2FGHIJ"
+      }'
+    ```
+
+    ```json Response (POST /payments/charge)
+    {
+      "id": "rt_04MNOPQR5STUVWX",
+      "path": "/payments/charge",
+      "target": "https://payments.internal.example.com/v1/charge",
+      "method": "POST",
+      "workspaceId": "ws_01HX9ABCDE2FGHIJ",
+      "createdAt": "2025-01-15T10:20:00Z"
+    }
+    ```
+    </CodeGroup>
+
+    Save the route `id` for the next step:
+
+    ```bash
+    ROUTE_ID="rt_04MNOPQR5STUVWX"
+    ```
+
+    <Note>
+      The `target` field should be the **full URL** of the upstream endpoint, including any path prefix needed by the upstream service. N-Gate forwards the request body and query parameters exactly as received, but replaces the host and path with the `target` value.
+    </Note>
+
+    To remove a route that is no longer needed:
+
+    ```bash
+    curl --request DELETE \
+      --url https://api.n-gate.io/api/routes/rt_04MNOPQR5STUVWX \
+      --header "Authorization: Bearer $TOKEN"
+    ```
+  </Step>
+
+  <Step title="Test the Proxy with a Live Request">
+    With a gateway, consumer, and route in place, you can now send a proxied request through N-Gate and verify that it reaches the upstream service correctly. Use `POST /api/routes/proxy` and supply the `routeId` along with the payload you want forwarded.
+
+    <CodeGroup>
+    ```bash cURL
+    curl --request POST \
+      --url https://api.n-gate.io/api/routes/proxy \
+      --header "Authorization: Bearer $TOKEN" \
+      --header 'Content-Type: application/json' \
+      --data '{
+        "routeId": "rt_04MNOPQR5STUVWX",
+        "payload": {
+          "amount": 5000,
+          "currency": "NGN",
+          "reference": "TXN-20250115-001"
+        }
+      }'
+    ```
+
+    ```json Successful Proxied Response
+    {
+      "status": "success",
+      "upstreamStatus": 200,
+      "upstreamResponse": {
+        "transactionId": "txn_ABC123",
+        "status": "approved",
+        "message": "Payment processed successfully."
+      }
+    }
+    ```
+
+    ```json Upstream Error Example
+    {
+      "status": "error",
+      "upstreamStatus": 400,
+      "upstreamResponse": {
+        "error": "insufficient_funds",
+        "message": "The account does not have sufficient funds."
+      }
+    }
+    ```
+    </CodeGroup>
+
+    A successful response means N-Gate reached your upstream service, forwarded the payload, and relayed the response. If you see `upstreamStatus: 200`, your integration is working end-to-end.
+
+    <Tip>
+      Check `upstreamStatus` — not just the outer HTTP status code — when debugging. N-Gate returns `200` from the proxy endpoint even when the upstream responds with a `4xx` or `5xx`, wrapping the upstream response for you to inspect.
+    </Tip>
+  </Step>
+
+</Steps>
+
+---
+
+## Troubleshooting Common Proxy Issues
+
+Even well-configured integrations occasionally surface errors. The table below covers the issues you're most likely to encounter and what to do about each one.
+
+<AccordionGroup>
+
+  <Accordion title="502 Bad Gateway — Upstream Unreachable">
+    **Symptom:** The proxy endpoint returns `502` or `upstreamStatus: 502`.
+
+    **Cause:** N-Gate could not reach the URL specified in the route's `target` field.
+
+    **Steps to resolve:**
+
+    1. Confirm the `target` URL is correct — list routes with `GET /api/routes` and inspect the `target` value.
+    2. Verify that the upstream service is running and accessible from the N-Gate network (check firewalls, VPN, or allow-lists).
+    3. Ensure there is no trailing slash on the gateway `url` field if the target URL was constructed from it.
+    4. Re-create the route with a corrected `target` if necessary.
+
+    ```bash
+    # Inspect the current target for a route
+    curl --request GET \
+      --url https://api.n-gate.io/api/routes \
+      --header "Authorization: Bearer $TOKEN"
+    ```
+  </Accordion>
+
+  <Accordion title="401 Unauthorized — Authentication Errors">
+    **Symptom:** Any N-Gate endpoint returns `401 Unauthorized`.
+
+    **Cause:** Your Bearer token is missing, malformed, or expired. Tokens expire after 3,600 seconds (1 hour) by default.
+
+    **Steps to resolve:**
+
+    1. Re-authenticate with `POST /auth/login` to obtain a fresh token.
+    2. Verify that the `Authorization` header is formatted exactly as `Bearer <token>` with a single space — no extra characters.
+    3. If the upstream service itself returns `401` (visible as `upstreamStatus: 401`), the issue is with the upstream's own auth — check API keys or credentials passed inside the `payload`.
+
+    <Warning>
+      Never log or commit your Bearer token to source control. Treat it with the same care as a password.
+    </Warning>
+  </Accordion>
+
+  <Accordion title="404 Not Found — Route Not Found">
+    **Symptom:** The proxy call returns `404` or an error indicating the route does not exist.
+
+    **Cause:** The `routeId` passed to `POST /api/routes/proxy` does not match any active route.
+
+    **Steps to resolve:**
+
+    1. List all routes with `GET /api/routes` and confirm the `routeId` you're using appears in the response.
+    2. Check that the route belongs to the same workspace your token has access to.
+    3. If the route was recently deleted by another team member, re-create it with `POST /api/routes`.
+
+    ```bash
+    # Verify the route exists
+    curl --request GET \
+      --url https://api.n-gate.io/api/routes \
+      --header "Authorization: Bearer $TOKEN"
+    ```
+  </Accordion>
+
+  <Accordion title="422 Unprocessable Entity — Invalid Request Body">
+    **Symptom:** A create or update request returns `422 Unprocessable Entity`.
+
+    **Cause:** A required field is missing or a field value fails validation (e.g., `workspaceId` does not exist, `method` is not a valid HTTP verb).
+
+    **Steps to resolve:**
+
+    1. Read the `errors` array in the response body — N-Gate includes field-level validation messages.
+    2. Confirm that `workspaceId` is a real workspace ID by listing workspaces.
+    3. Confirm that `gatewayId` is a real gateway ID for consumer creation.
+    4. Ensure `method` is one of `GET`, `POST`, `PUT`, `PATCH`, or `DELETE` (uppercase).
+  </Accordion>
+
+  <Accordion title="429 Too Many Requests — Rate Limit Exceeded">
+    **Symptom:** Requests return `429 Too Many Requests`, especially during load tests or bulk imports.
+
+    **Cause:** Your consumer or account has exceeded the platform rate limit.
+
+    **Steps to resolve:**
+
+    1. Inspect the `Retry-After` header in the response to see how long to wait.
+    2. Implement exponential back-off in your client code rather than retrying immediately.
+    3. Contact your Tenant Admin to review rate limit policies for your workspace if you consistently hit this limit during normal operations.
+  </Accordion>
+
+</AccordionGroup>
+
+---
+
+## Quick Reference
+
+| Task | Method | Endpoint |
+|---|---|---|
+| Authenticate | `POST` | `/auth/login` |
+| List gateways | `GET` | `/api/gateways` |
+| Create gateway | `POST` | `/api/gateways` |
+| List consumers | `GET` | `/api/gateway-consumer` |
+| Create consumer | `POST` | `/api/gateway-consumer` |
+| Delete consumer | `DELETE` | `/api/gateway-consumer/:id` |
+| List routes | `GET` | `/api/routes` |
+| Create route | `POST` | `/api/routes` |
+| Delete route | `DELETE` | `/api/routes/:id` |
+| Proxy a request | `POST` | `/api/routes/proxy` |

@@ -1,0 +1,282 @@
+---
+title: "Authenticate and Get a Bearer Token for N-Gate"
+sidebarTitle: "Authentication"
+description: "Log in with your email and password to receive a Bearer token, then attach it to every N-Gate API request via the Authorization header."
+---
+
+Authentication in N-Gate uses a token-based flow: you call `POST /auth/login` with your email and password, receive a short-lived JWT Bearer token in the response, and include that token in the `Authorization` header of every subsequent request. This page covers the full login endpoint reference, how to attach the token, what happens when it expires, and how to re-authenticate smoothly.
+
+## POST /auth/login
+
+The login endpoint is the only N-Gate API endpoint that does **not** require an existing Bearer token. It accepts your credentials as a JSON body and returns a signed JWT along with basic user information and an expiry timestamp.
+
+```
+POST https://api.n-gate.io/auth/login
+```
+
+<Note>
+  This endpoint does not require an `Authorization` header. All other endpoints do. Set `Content-Type: application/json` when calling this endpoint.
+</Note>
+
+### Request Body
+
+<ParamField body="email" type="string" required>
+  The email address associated with your N-Gate account (for example, `admin@example.com`).
+</ParamField>
+
+<ParamField body="password" type="string" required>
+  The password for your N-Gate account. Passwords are never returned in any API response.
+</ParamField>
+
+### Response Fields
+
+A `200 OK` response returns the following top-level fields:
+
+<ResponseField name="token" type="string" required>
+  A signed JWT Bearer token. Include this value in the `Authorization: Bearer <token>` header of every subsequent request.
+</ResponseField>
+
+<ResponseField name="user" type="object" required>
+  An object containing the authenticated user's profile.
+
+  <Expandable title="user fields">
+    <ResponseField name="user.id" type="string" required>
+      The unique identifier of the authenticated user (for example, `usr_abc123`).
+    </ResponseField>
+    <ResponseField name="user.email" type="string" required>
+      The email address of the authenticated user, confirming which account the token belongs to.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="expiresAt" type="string" required>
+  ISO 8601 UTC timestamp indicating when the token will expire. After this time the token is rejected with a `401 Unauthorized` response and you must re-authenticate.
+</ResponseField>
+
+### Example Request and Response
+
+<CodeGroup>
+
+```bash curl
+curl --request POST \
+  --url https://api.n-gate.io/auth/login \
+  --header 'Content-Type: application/json' \
+  --data '{
+    "email": "admin@example.com",
+    "password": "supersecret"
+  }'
+```
+
+```javascript JavaScript (fetch)
+const response = await fetch('https://api.n-gate.io/auth/login', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+  },
+  body: JSON.stringify({
+    email: 'admin@example.com',
+    password: 'supersecret',
+  }),
+});
+
+const { token, user, expiresAt } = await response.json();
+console.log('Token:', token);
+console.log('Expires at:', expiresAt);
+```
+
+```python Python (requests)
+import requests
+
+response = requests.post(
+    'https://api.n-gate.io/auth/login',
+    json={
+        'email': 'admin@example.com',
+        'password': 'supersecret',
+    }
+)
+
+data = response.json()
+token = data['token']
+expires_at = data['expiresAt']
+print(f'Token: {token}')
+print(f'Expires at: {expires_at}')
+```
+
+</CodeGroup>
+
+**Example response (`200 OK`):**
+
+```json
+{
+  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1c3JfYWJjMTIzIiwiaWF0IjoxNzA1MzE4NDAwfQ.abc123",
+  "user": {
+    "id": "usr_abc123",
+    "email": "admin@example.com"
+  },
+  "expiresAt": "2024-01-22T10:00:00Z"
+}
+```
+
+## Using the Token
+
+Once you have a token, attach it to every subsequent request as a Bearer token in the `Authorization` header:
+
+```http
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+```
+
+Here is what an authenticated request looks like in practice:
+
+<CodeGroup>
+
+```bash curl
+curl --request GET \
+  --url https://api.n-gate.io/api/workspaces \
+  --header 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...' \
+  --header 'Content-Type: application/json'
+```
+
+```javascript JavaScript (fetch)
+const token = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...';
+
+const response = await fetch('https://api.n-gate.io/api/workspaces', {
+  method: 'GET',
+  headers: {
+    'Authorization': `Bearer ${token}`,
+    'Content-Type': 'application/json',
+  },
+});
+
+const { data, pagination } = await response.json();
+```
+
+```python Python (requests)
+import requests
+
+token = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...'
+
+response = requests.get(
+    'https://api.n-gate.io/api/workspaces',
+    headers={
+        'Authorization': f'Bearer {token}',
+        'Content-Type': 'application/json',
+    }
+)
+
+data = response.json()
+```
+
+</CodeGroup>
+
+<Warning>
+  Never include your Bearer token in a URL query parameter or commit it to source control. Store tokens in environment variables or a secrets manager and read them at runtime.
+</Warning>
+
+## Token Expiry
+
+Every token carries an `expiresAt` timestamp. When a token expires, any API call made with it returns a `401 Unauthorized` response:
+
+```json
+{
+  "error": "Token has expired",
+  "statusCode": 401,
+  "timestamp": "2024-01-22T11:00:00Z"
+}
+```
+
+Your application should catch `401` responses and treat them as a signal to re-authenticate. Do not indefinitely retry a `401` without first obtaining a fresh token — doing so only generates more failed requests.
+
+<Tip>
+  Proactively check `expiresAt` before making requests. If the token expires within the next 60 seconds, refresh it preemptively to avoid a mid-flow failure.
+</Tip>
+
+## Re-Authentication Flow
+
+Re-authentication is identical to the initial login: call `POST /auth/login` again with the same credentials to receive a new token. There is no dedicated refresh-token endpoint — your integration should store credentials securely and call the login endpoint whenever the current token has expired or is about to expire.
+
+A robust re-authentication pattern looks like this:
+
+<CodeGroup>
+
+```javascript JavaScript (fetch)
+let token = null;
+let expiresAt = null;
+
+async function getValidToken() {
+  // Re-authenticate if token is missing or expires within 60 seconds
+  if (!token || new Date(expiresAt) - Date.now() < 60_000) {
+    const response = await fetch('https://api.n-gate.io/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email: process.env.NGATE_EMAIL,
+        password: process.env.NGATE_PASSWORD,
+      }),
+    });
+    const data = await response.json();
+    token = data.token;
+    expiresAt = data.expiresAt;
+  }
+  return token;
+}
+
+// Use in any request
+const t = await getValidToken();
+const response = await fetch('https://api.n-gate.io/api/workspaces', {
+  headers: { 'Authorization': `Bearer ${t}` },
+});
+```
+
+```python Python (requests)
+import os
+import requests
+from datetime import datetime, timezone, timedelta
+
+_token = None
+_expires_at = None
+
+def get_valid_token():
+    global _token, _expires_at
+
+    # Re-authenticate if token is missing or expires within 60 seconds
+    if (
+        _token is None
+        or _expires_at is None
+        or datetime.fromisoformat(_expires_at.replace('Z', '+00:00'))
+            - datetime.now(timezone.utc)
+            < timedelta(seconds=60)
+    ):
+        response = requests.post(
+            'https://api.n-gate.io/auth/login',
+            json={
+                'email': os.environ['NGATE_EMAIL'],
+                'password': os.environ['NGATE_PASSWORD'],
+            }
+        )
+        response.raise_for_status()
+        data = response.json()
+        _token = data['token']
+        _expires_at = data['expiresAt']
+
+    return _token
+
+# Use in any request
+token = get_valid_token()
+response = requests.get(
+    'https://api.n-gate.io/api/workspaces',
+    headers={'Authorization': f'Bearer {token}'}
+)
+```
+
+</CodeGroup>
+
+## Common Authentication Errors
+
+| Status Code | Cause | Resolution |
+|---|---|---|
+| `401 Unauthorized` | Incorrect email or password supplied to `/auth/login`, or the token used on another endpoint has expired. | Verify your credentials or call `/auth/login` again to obtain a fresh token. |
+| `422 Unprocessable Entity` | One or both of the required fields (`email`, `password`) were missing from the request body. | Ensure both fields are present and the `Content-Type` header is set to `application/json`. |
+
+<Note>
+  N-Gate does not lock accounts after repeated failed login attempts, but excessive failed attempts from a single IP may be rate-limited with a `429 Too Many Requests` response. See the [API Overview](/api-reference/overview#rate-limiting) for details on rate limiting behaviour.
+</Note>

@@ -1,0 +1,230 @@
+---
+title: "Invitations API — Manage Workspace Member Invites"
+sidebarTitle: "Invitations"
+description: "Invite users to an N-Gate workspace by email, list outstanding invitations, and cancel pending invites before they are accepted."
+---
+
+The Invitations API provides a controlled onboarding flow for adding new members to a workspace. Rather than granting access directly, you send an invitation to a user's email address alongside the role they will receive upon acceptance. Invitations remain in a `pending` state until the recipient accepts or until you explicitly cancel them. Workspace owners and admins can inspect all outstanding invitations and revoke any that are no longer needed.
+
+---
+
+## Invite a User to a Workspace
+
+<br />
+
+`POST /api/workspaces/:workspaceId/invite`
+
+Sends an invitation email to a user, granting them access to the workspace with the specified role upon acceptance.
+
+### Path Parameters
+
+<ParamField path="workspaceId" type="string" required>
+  The unique identifier of the workspace you are inviting the user into.
+</ParamField>
+
+### Request Body
+
+<ParamField body="email" type="string" required>
+  The email address of the person to invite. An invitation email will be sent to this address. Must be a valid email format.
+</ParamField>
+
+<ParamField body="roleId" type="string" required>
+  The role that will be assigned to the invitee once they accept. Must be a valid role ID in your N-Gate account (e.g. `role_admin`, `role_viewer`).
+</ParamField>
+
+### Response
+
+<ResponseField name="id" type="string">
+  The unique identifier of the newly created invitation record.
+</ResponseField>
+
+<ResponseField name="email" type="string">
+  The email address the invitation was sent to.
+</ResponseField>
+
+<ResponseField name="roleId" type="string">
+  The role that will be assigned upon acceptance.
+</ResponseField>
+
+<ResponseField name="workspaceId" type="string">
+  The workspace this invitation is for.
+</ResponseField>
+
+<ResponseField name="status" type="string">
+  The current status of the invitation. Always `"pending"` on creation.
+</ResponseField>
+
+<ResponseField name="createdAt" type="string (ISO 8601)">
+  Timestamp of when the invitation was created.
+</ResponseField>
+
+<Note>
+  If the email address already belongs to an active workspace member or has an existing `pending` invitation, the API returns `409 Conflict` to prevent duplicate entries.
+</Note>
+
+### Example
+
+<CodeGroup>
+```bash cURL
+curl --request POST \
+  --url "https://api.n-gate.io/api/workspaces/ws_01hx9zt3m5kbf2qp/invite" \
+  --header "Authorization: Bearer <token>" \
+  --header "Content-Type: application/json" \
+  --data '{
+    "email": "jane.doe@example.com",
+    "roleId": "role_admin"
+  }'
+```
+
+```json Response
+{
+  "id": "inv_01hxbpk3m5kbf2qz",
+  "email": "jane.doe@example.com",
+  "roleId": "role_admin",
+  "workspaceId": "ws_01hx9zt3m5kbf2qp",
+  "status": "pending",
+  "createdAt": "2024-06-01T10:00:00Z"
+}
+```
+</CodeGroup>
+
+---
+
+## List Pending Invitations
+
+<br />
+
+`GET /api/workspaces/:workspaceId/invitations`
+
+Returns all outstanding (non-accepted, non-cancelled) invitations for the specified workspace.
+
+### Path Parameters
+
+<ParamField path="workspaceId" type="string" required>
+  The unique identifier of the workspace whose invitations you want to retrieve.
+</ParamField>
+
+### Response
+
+Returns an array of invitation objects.
+
+<ResponseField name="id" type="string">
+  The unique identifier of the invitation.
+</ResponseField>
+
+<ResponseField name="email" type="string">
+  The email address the invitation was sent to.
+</ResponseField>
+
+<ResponseField name="roleId" type="string">
+  The role that will be granted upon acceptance.
+</ResponseField>
+
+<ResponseField name="status" type="string">
+  The invitation's current status. Values: `"pending"`, `"accepted"`, `"cancelled"`.
+</ResponseField>
+
+<ResponseField name="createdAt" type="string (ISO 8601)">
+  Timestamp of when the invitation was originally issued.
+</ResponseField>
+
+<Note>
+  This endpoint returns all invitations regardless of status, so you can audit historical invite activity. Filter on `status: "pending"` client-side to show only actionable invitations.
+</Note>
+
+### Example
+
+<CodeGroup>
+```bash cURL
+curl --request GET \
+  --url "https://api.n-gate.io/api/workspaces/ws_01hx9zt3m5kbf2qp/invitations" \
+  --header "Authorization: Bearer <token>"
+```
+
+```json Response
+[
+  {
+    "id": "inv_01hxbpk3m5kbf2qz",
+    "email": "jane.doe@example.com",
+    "roleId": "role_admin",
+    "status": "pending",
+    "createdAt": "2024-06-01T10:00:00Z"
+  },
+  {
+    "id": "inv_01hxbpk9r7ncd4ma",
+    "email": "bob.smith@example.com",
+    "roleId": "role_viewer",
+    "status": "pending",
+    "createdAt": "2024-06-02T08:30:00Z"
+  }
+]
+```
+</CodeGroup>
+
+---
+
+## Cancel an Invitation
+
+<br />
+
+`DELETE /api/workspaces/:workspaceId/invitations/:invitationId`
+
+Cancels a pending invitation, preventing the recipient from using the invitation link to join the workspace.
+
+### Path Parameters
+
+<ParamField path="workspaceId" type="string" required>
+  The unique identifier of the workspace the invitation belongs to.
+</ParamField>
+
+<ParamField path="invitationId" type="string" required>
+  The unique identifier of the invitation to cancel.
+</ParamField>
+
+### Response
+
+<ResponseField name="message" type="string">
+  A confirmation string. Returns `"Invitation cancelled"` on success.
+</ResponseField>
+
+<Warning>
+  You can only cancel invitations that are still in `pending` status. Attempting to cancel an already-accepted or previously-cancelled invitation returns `409 Conflict`. If a user has already accepted, use the [Permissions API](/api-reference/permissions) to remove their access.
+</Warning>
+
+### Example
+
+<CodeGroup>
+```bash cURL
+curl --request DELETE \
+  --url "https://api.n-gate.io/api/workspaces/ws_01hx9zt3m5kbf2qp/invitations/inv_01hxbpk3m5kbf2qz" \
+  --header "Authorization: Bearer <token>"
+```
+
+```json Response
+{
+  "message": "Invitation cancelled"
+}
+```
+</CodeGroup>
+
+---
+
+## Error Responses
+
+All Invitations API errors follow the standard N-Gate error shape:
+
+```json
+{
+  "error": "Invitation not found",
+  "statusCode": 404,
+  "timestamp": "2024-06-01T12:00:00Z"
+}
+```
+
+| Status Code | Meaning                                                                   |
+|-------------|---------------------------------------------------------------------------|
+| `400`       | Missing required fields (`email` or `roleId`) or invalid email format     |
+| `401`       | Missing or invalid `Authorization` token                                  |
+| `403`       | Caller lacks permission to manage invitations in this workspace           |
+| `404`       | The specified `workspaceId` or `invitationId` does not exist              |
+| `409`       | Invitation already exists for this email, or invitation is not cancellable|

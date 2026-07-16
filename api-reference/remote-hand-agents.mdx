@@ -1,0 +1,305 @@
+---
+title: "Remote Hand Agents API — Register and Control Agents"
+sidebarTitle: "Remote Agents"
+description: "Register physical or virtual remote hand agents, list agents by status and type, and update agent metadata, location, and operational state."
+---
+
+Remote hand agents are the managed execution units in N-Gate's infrastructure layer. A *physical* agent represents a hardware device or on-site technician terminal that can perform real-world actions such as cable management or equipment reboots. A *virtual* agent is a software-defined process that executes automated tasks in a cloud or on-premises environment. Both types share the same API surface and lifecycle, and each agent can spawn multiple concurrent runtime instances tracked through the [Agent Instances API](/api-reference/agent-instances).
+
+---
+
+## List Agents
+
+<br />
+
+```http
+GET /api/remote-hand-agent
+```
+
+Returns a paginated list of remote hand agents. Combine `status` and `type` filters to find, for example, all physical agents currently in maintenance, or all online virtual agents for a workspace.
+
+### Query Parameters
+
+<ParamField query="workspaceId" type="string">
+  Return only agents belonging to this workspace.
+</ParamField>
+
+<ParamField query="status" type="string">
+  Filter by operational status. One of:
+  - `online` — agent is reachable and ready to accept instance requests.
+  - `offline` — agent is registered but not currently reachable.
+  - `maintenance` — agent is undergoing scheduled maintenance and will not accept new instances.
+</ParamField>
+
+<ParamField query="type" type="string">
+  Filter by agent type. One of `physical` or `virtual`.
+</ParamField>
+
+<ParamField query="page" type="integer" default="1">
+  Page number to retrieve. Starts at `1`.
+</ParamField>
+
+<ParamField query="limit" type="integer" default="20">
+  Number of records per page. Maximum is `100`.
+</ParamField>
+
+### Response
+
+<ResponseField name="data" type="array">
+  <Expandable title="Agent object">
+    <ResponseField name="id" type="string">
+      Unique agent identifier.
+    </ResponseField>
+    <ResponseField name="name" type="string">
+      Human-readable name for the agent.
+    </ResponseField>
+    <ResponseField name="type" type="string">
+      Agent type: `physical` or `virtual`.
+    </ResponseField>
+    <ResponseField name="status" type="string">
+      Current operational status: `online`, `offline`, or `maintenance`.
+    </ResponseField>
+    <ResponseField name="location" type="string">
+      Physical or logical location descriptor (e.g. `"DC1-Rack-42"` or
+      `"us-east-1"`).
+    </ResponseField>
+    <ResponseField name="workspaceId" type="string">
+      Workspace this agent belongs to.
+    </ResponseField>
+    <ResponseField name="createdAt" type="string">
+      ISO 8601 registration timestamp.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="pagination" type="object">
+  <Expandable title="Pagination object">
+    <ResponseField name="page" type="integer">Current page number.</ResponseField>
+    <ResponseField name="limit" type="integer">Records per page.</ResponseField>
+    <ResponseField name="total" type="integer">Total number of matching records.</ResponseField>
+  </Expandable>
+</ResponseField>
+
+<CodeGroup>
+```bash cURL — list all online physical agents
+curl --request GET \
+  --url "https://api.n-gate.io/api/remote-hand-agent?workspaceId=ws_01&status=online&type=physical" \
+  --header "Authorization: Bearer <token>"
+```
+
+```json Response
+{
+  "data": [
+    {
+      "id": "agt_rh001",
+      "name": "Rack Agent Alpha",
+      "type": "physical",
+      "status": "online",
+      "location": "DC1-Rack-42",
+      "workspaceId": "ws_01",
+      "createdAt": "2024-10-01T08:00:00.000Z"
+    }
+  ],
+  "pagination": {
+    "page": 1,
+    "limit": 20,
+    "total": 1
+  }
+}
+```
+</CodeGroup>
+
+---
+
+## Register an Agent
+
+<br />
+
+```http
+POST /api/remote-hand-agent
+```
+
+Registers a new remote hand agent in N-Gate. Newly registered agents always start in `offline` status. To bring an agent online, update its status to `online` via the [Update an Agent](#update-an-agent) endpoint once the agent process or device has established its heartbeat connection.
+
+### Body Parameters
+
+<ParamField body="name" type="string" required>
+  A unique, descriptive name for the agent within the workspace (e.g.
+  `"Rack Agent Alpha"`, `"Lambda Worker EU"`).
+</ParamField>
+
+<ParamField body="type" type="string" required>
+  Agent type. Must be one of `physical` or `virtual`.
+</ParamField>
+
+<ParamField body="location" type="string" required>
+  A location descriptor for the agent. For physical agents this is typically a
+  data-centre rack identifier; for virtual agents, a region or availability zone
+  slug.
+</ParamField>
+
+<ParamField body="workspaceId" type="string" required>
+  The workspace this agent will be registered under.
+</ParamField>
+
+<ParamField body="metadata" type="object">
+  An optional free-form JSON object for storing agent-specific configuration or
+  tags (e.g. `{"tier": "critical", "region": "eu-west-1"}`).
+</ParamField>
+
+### Response
+
+<ResponseField name="id" type="string">Unique ID assigned to the new agent.</ResponseField>
+<ResponseField name="name" type="string">Agent display name.</ResponseField>
+<ResponseField name="type" type="string">Agent type: `physical` or `virtual`.</ResponseField>
+<ResponseField name="status" type="string">Always `"offline"` on registration.</ResponseField>
+<ResponseField name="location" type="string">Location descriptor.</ResponseField>
+<ResponseField name="workspaceId" type="string">Owning workspace.</ResponseField>
+<ResponseField name="metadata" type="object">Metadata object, if provided; otherwise `null`.</ResponseField>
+<ResponseField name="createdAt" type="string">ISO 8601 registration timestamp.</ResponseField>
+
+<CodeGroup>
+```bash cURL
+curl --request POST \
+  --url "https://api.n-gate.io/api/remote-hand-agent" \
+  --header "Authorization: Bearer <token>" \
+  --header "Content-Type: application/json" \
+  --data '{
+    "name": "Rack Agent Alpha",
+    "type": "physical",
+    "location": "DC1-Rack-42",
+    "workspaceId": "ws_01",
+    "metadata": {
+      "tier": "critical",
+      "contactEmail": "noc@example.com"
+    }
+  }'
+```
+
+```json Response
+{
+  "id": "agt_rh001",
+  "name": "Rack Agent Alpha",
+  "type": "physical",
+  "status": "offline",
+  "location": "DC1-Rack-42",
+  "workspaceId": "ws_01",
+  "metadata": {
+    "tier": "critical",
+    "contactEmail": "noc@example.com"
+  },
+  "createdAt": "2024-10-01T08:00:00.000Z"
+}
+```
+</CodeGroup>
+
+---
+
+## Update an Agent
+
+<br />
+
+```http
+PUT /api/remote-hand-agent/:id
+```
+
+Partially updates an agent's mutable fields. All body parameters are optional — supply only the fields you want to change. The response always returns the full updated agent object.
+
+### Path Parameters
+
+<ParamField path="id" type="string" required>
+  The unique ID of the agent to update.
+</ParamField>
+
+### Body Parameters
+
+<ParamField body="name" type="string">
+  New display name for the agent.
+</ParamField>
+
+<ParamField body="location" type="string">
+  Updated location descriptor.
+</ParamField>
+
+<ParamField body="status" type="string">
+  New operational status. One of `online`, `offline`, or `maintenance`.
+</ParamField>
+
+<ParamField body="metadata" type="object">
+  Replacement metadata object. This is a full replacement — keys not included
+  in the new object will be removed.
+</ParamField>
+
+### Response
+
+Returns the full updated agent object with the same shape as the [Register an Agent](#register-an-agent) response.
+
+<Note>
+  Transitioning an agent to `maintenance` status will prevent new instances from
+  being started on it. Any already-running instances are not automatically
+  stopped — manage those via the [Agent Instances API](/api-reference/agent-instances).
+</Note>
+
+<CodeGroup>
+```bash cURL — bring agent online
+curl --request PUT \
+  --url "https://api.n-gate.io/api/remote-hand-agent/agt_rh001" \
+  --header "Authorization: Bearer <token>" \
+  --header "Content-Type: application/json" \
+  --data '{
+    "status": "online"
+  }'
+```
+
+```bash cURL — update location and metadata
+curl --request PUT \
+  --url "https://api.n-gate.io/api/remote-hand-agent/agt_rh001" \
+  --header "Authorization: Bearer <token>" \
+  --header "Content-Type: application/json" \
+  --data '{
+    "location": "DC2-Rack-07",
+    "metadata": {
+      "tier": "standard",
+      "contactEmail": "ops@example.com"
+    }
+  }'
+```
+
+```json Response
+{
+  "id": "agt_rh001",
+  "name": "Rack Agent Alpha",
+  "type": "physical",
+  "status": "online",
+  "location": "DC1-Rack-42",
+  "workspaceId": "ws_01",
+  "metadata": {
+    "tier": "critical",
+    "contactEmail": "noc@example.com"
+  },
+  "createdAt": "2024-10-01T08:00:00.000Z"
+}
+```
+</CodeGroup>
+
+---
+
+## Error Responses
+
+All errors follow the standard N-Gate error envelope:
+
+```json
+{
+  "error": "<message>",
+  "statusCode": 400,
+  "timestamp": "2024-10-01T08:05:00.000Z"
+}
+```
+
+| Status | Meaning                                                       |
+| ------ | ------------------------------------------------------------- |
+| `400`  | Missing required fields or invalid `type` / `status` value.  |
+| `401`  | Missing or invalid Bearer token.                              |
+| `403`  | Token lacks agent-write permission.                           |
+| `404`  | Agent not found.                                              |
+| `409`  | Agent name already exists in the workspace.                   |

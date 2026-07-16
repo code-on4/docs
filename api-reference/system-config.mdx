@@ -1,0 +1,108 @@
+---
+title: "System Config API — Upload Platform Configuration Files"
+sidebarTitle: "System Config"
+description: "Upload and apply platform-wide system configuration files to N-Gate. Requires system-level admin permissions; changes take effect immediately on success."
+---
+
+The System Configuration API provides a privileged interface for applying platform-wide configuration changes to your N-Gate deployment. Rather than editing configuration through a dashboard, you can version-control your config files in a repository and push them programmatically via this endpoint as part of a CI/CD pipeline or change management workflow. Configuration is applied atomically — if the uploaded file fails validation, the existing configuration is left untouched and the error response will describe what went wrong.
+
+<Warning>
+  This endpoint requires **system-level admin permissions**. It is not accessible
+  with standard workspace-scoped tokens. Use only dedicated deployment service
+  accounts with this permission. Applying an invalid configuration file will not
+  break the running platform, but applying a valid but incorrect configuration
+  (e.g. wrong upstream URLs) may impact live traffic immediately.
+</Warning>
+
+---
+
+## Upload System Configuration
+
+<br />
+
+```http
+POST /api/system/config
+```
+
+Uploads a configuration file and applies it to the running N-Gate platform. The request must use `multipart/form-data` encoding. On success, the new configuration is applied synchronously before the response is returned, and a `configId` is issued for audit trail purposes.
+
+<Note>
+  N-Gate validates the uploaded file against the current configuration schema
+  before applying it. If validation fails, the endpoint returns `400 Bad Request`
+  with a descriptive error message. Your existing configuration remains unchanged.
+</Note>
+
+### Body Parameters
+
+<ParamField body="configFile" type="file" required>
+  The configuration file to upload and apply. Accepted formats: `.yaml`, `.yml`,
+  `.json`. Maximum file size is 5 MB. The file must conform to the N-Gate system
+  configuration schema for your platform version.
+</ParamField>
+
+<ParamField body="description" type="string">
+  An optional description of what this configuration change does. Stored with
+  the audit record for the `configId` and visible in the admin audit log.
+</ParamField>
+
+### Response
+
+<ResponseField name="status" type="string">
+  Always `"applied"` on a successful upload and application.
+</ResponseField>
+<ResponseField name="configId" type="string">
+  A unique identifier for this configuration snapshot. Reference this ID in
+  support requests or when auditing configuration history.
+</ResponseField>
+<ResponseField name="appliedAt" type="string">
+  ISO 8601 timestamp of when the configuration was applied to the platform.
+</ResponseField>
+
+<CodeGroup>
+```bash cURL — upload a YAML config file
+curl --request POST \
+  --url "https://api.n-gate.io/api/system/config" \
+  --header "Authorization: Bearer <admin-token>" \
+  --form "configFile=@/path/to/n-gate-config.yaml" \
+  --form "description=Enable rate limiting on all public gateways"
+```
+
+```bash cURL — upload a JSON config file
+curl --request POST \
+  --url "https://api.n-gate.io/api/system/config" \
+  --header "Authorization: Bearer <admin-token>" \
+  --form "configFile=@/path/to/n-gate-config.json" \
+  --form "description=Update timeout settings for telecom providers"
+```
+
+```json Response
+{
+  "status": "applied",
+  "configId": "cfg_20241120_001",
+  "appliedAt": "2024-11-20T14:30:00.000Z"
+}
+```
+</CodeGroup>
+
+---
+
+## Error Responses
+
+All errors follow the standard N-Gate error envelope:
+
+```json
+{
+  "error": "<message>",
+  "statusCode": 400,
+  "timestamp": "2024-11-20T14:30:05.000Z"
+}
+```
+
+| Status | Meaning                                                                       |
+| ------ | ----------------------------------------------------------------------------- |
+| `400`  | Missing `configFile`, unsupported file format, or schema validation failure.  |
+| `401`  | Missing or invalid Bearer token.                                              |
+| `403`  | Token does not have system-level admin permissions.                           |
+| `413`  | Uploaded file exceeds the 5 MB size limit.                                    |
+| `415`  | Request was not sent as `multipart/form-data`.                                |
+| `422`  | File parsed successfully but configuration values are semantically invalid.   |

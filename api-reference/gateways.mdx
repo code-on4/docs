@@ -1,0 +1,229 @@
+---
+title: "Gateways API — Register and Manage Upstream Gateways"
+sidebarTitle: "Gateways"
+description: "Register upstream gateways, list all configured gateways in a workspace, and remove gateways that are no longer needed."
+---
+
+Gateways are the core routing unit in N-Gate. Each gateway represents an upstream base URL that N-Gate proxies traffic to on behalf of your consumers. You register a gateway once per upstream service, then attach consumers, policies, and routes to it. All gateway operations are scoped to a workspace, and every mutating request requires a valid Bearer token with at least gateway-write permissions.
+
+---
+
+## List Gateways
+
+<br />
+
+```http
+GET /api/gateways
+```
+
+Returns a paginated list of gateways visible to the authenticated caller. Filter by `workspaceId` to scope results to a single workspace.
+
+### Query Parameters
+
+<ParamField query="workspaceId" type="string">
+  Return only gateways belonging to this workspace. Omit to return all gateways
+  the caller has access to across workspaces.
+</ParamField>
+
+<ParamField query="page" type="integer" default="1">
+  Page number to retrieve. Starts at `1`.
+</ParamField>
+
+<ParamField query="limit" type="integer" default="20">
+  Number of records per page. Maximum is `100`.
+</ParamField>
+
+### Response
+
+<ResponseField name="data" type="array">
+  <Expandable title="Gateway object">
+    <ResponseField name="id" type="string">
+      Unique identifier for the gateway.
+    </ResponseField>
+    <ResponseField name="name" type="string">
+      Human-readable display name.
+    </ResponseField>
+    <ResponseField name="url" type="string">
+      The upstream base URL this gateway proxies to.
+    </ResponseField>
+    <ResponseField name="workspaceId" type="string">
+      Workspace this gateway belongs to.
+    </ResponseField>
+    <ResponseField name="status" type="string">
+      Current status. One of `active`, `inactive`.
+    </ResponseField>
+    <ResponseField name="createdAt" type="string">
+      ISO 8601 timestamp of when the gateway was created.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="pagination" type="object">
+  <Expandable title="Pagination object">
+    <ResponseField name="page" type="integer">Current page number.</ResponseField>
+    <ResponseField name="limit" type="integer">Records per page.</ResponseField>
+    <ResponseField name="total" type="integer">Total number of matching records.</ResponseField>
+  </Expandable>
+</ResponseField>
+
+<CodeGroup>
+```bash cURL
+curl --request GET \
+  --url "https://api.n-gate.io/api/gateways?workspaceId=ws_01&page=1&limit=20" \
+  --header "Authorization: Bearer <token>"
+```
+
+```json Response
+{
+  "data": [
+    {
+      "id": "gw_abc123",
+      "name": "Payments Upstream",
+      "url": "https://payments.internal.example.com",
+      "workspaceId": "ws_01",
+      "status": "active",
+      "createdAt": "2024-11-15T09:00:00.000Z"
+    }
+  ],
+  "pagination": {
+    "page": 1,
+    "limit": 20,
+    "total": 1
+  }
+}
+```
+</CodeGroup>
+
+---
+
+## Create a Gateway
+
+<br />
+
+```http
+POST /api/gateways
+```
+
+Registers a new upstream gateway. The `url` field must be a reachable base URL — N-Gate will use it as the root when forwarding proxied requests downstream.
+
+### Body Parameters
+
+<ParamField body="name" type="string" required>
+  A human-readable name for the gateway (e.g. `"Payments Upstream"`). Must be
+  unique within the workspace.
+</ParamField>
+
+<ParamField body="url" type="string" required>
+  The upstream base URL N-Gate will proxy traffic to. Must be a valid `https://`
+  or `http://` URL (e.g. `"https://payments.internal.example.com"`).
+</ParamField>
+
+<ParamField body="workspaceId" type="string" required>
+  The workspace this gateway belongs to.
+</ParamField>
+
+<ParamField body="description" type="string">
+  An optional free-text description of what this gateway routes to.
+</ParamField>
+
+### Response
+
+<ResponseField name="id" type="string">Unique ID assigned to the new gateway.</ResponseField>
+<ResponseField name="name" type="string">Gateway display name.</ResponseField>
+<ResponseField name="url" type="string">Upstream base URL.</ResponseField>
+<ResponseField name="workspaceId" type="string">Owning workspace.</ResponseField>
+<ResponseField name="description" type="string">Description, if provided.</ResponseField>
+<ResponseField name="status" type="string">Always `"active"` on creation.</ResponseField>
+<ResponseField name="createdAt" type="string">ISO 8601 creation timestamp.</ResponseField>
+
+<CodeGroup>
+```bash cURL
+curl --request POST \
+  --url "https://api.n-gate.io/api/gateways" \
+  --header "Authorization: Bearer <token>" \
+  --header "Content-Type: application/json" \
+  --data '{
+    "name": "Payments Upstream",
+    "url": "https://payments.internal.example.com",
+    "workspaceId": "ws_01",
+    "description": "Routes to the core payments microservice"
+  }'
+```
+
+```json Response
+{
+  "id": "gw_abc123",
+  "name": "Payments Upstream",
+  "url": "https://payments.internal.example.com",
+  "workspaceId": "ws_01",
+  "description": "Routes to the core payments microservice",
+  "status": "active",
+  "createdAt": "2024-11-15T09:00:00.000Z"
+}
+```
+</CodeGroup>
+
+---
+
+## Delete a Gateway
+
+<br />
+
+```http
+DELETE /api/gateways/:id
+```
+
+Permanently removes a gateway. Any consumers or route policies attached to this gateway must be removed first; attempting to delete a gateway with active consumers will return a `409 Conflict`.
+
+### Path Parameters
+
+<ParamField path="id" type="string" required>
+  The unique ID of the gateway to remove.
+</ParamField>
+
+### Response
+
+<ResponseField name="message" type="string">
+  Confirmation string. Always `"Gateway removed"` on success.
+</ResponseField>
+
+<Warning>
+  Deleting a gateway is irreversible. Ensure all consumers and policies attached
+  to this gateway are migrated or removed before proceeding.
+</Warning>
+
+<CodeGroup>
+```bash cURL
+curl --request DELETE \
+  --url "https://api.n-gate.io/api/gateways/gw_abc123" \
+  --header "Authorization: Bearer <token>"
+```
+
+```json Response
+{
+  "message": "Gateway removed"
+}
+```
+</CodeGroup>
+
+---
+
+## Error Responses
+
+All errors follow the standard N-Gate error envelope:
+
+```json
+{
+  "error": "<message>",
+  "statusCode": 400,
+  "timestamp": "2024-11-15T09:05:00.000Z"
+}
+```
+
+| Status | Meaning                                              |
+| ------ | ---------------------------------------------------- |
+| `400`  | Missing or invalid request body / query parameters.  |
+| `401`  | Missing or invalid Bearer token.                     |
+| `403`  | Token lacks gateway-write permission.                |
+| `404`  | Gateway not found.                                   |
+| `409`  | Gateway has active consumers and cannot be deleted.  |

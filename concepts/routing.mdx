@@ -1,0 +1,230 @@
+---
+title: "API Routing & Proxying in N-Gate Explained"
+sidebarTitle: "Routing"
+description: "Understand how N-Gate routes define dynamic endpoints and proxy requests securely to your backend services with auth enforcement."
+---
+
+N-Gate sits between your API clients and your backend services as an intelligent reverse proxy layer. Instead of exposing your internal services directly to the outside world, you define **Routes** inside N-Gate that describe which paths and HTTP methods should be accepted, and where each matching request should be forwarded. This lets you centralize authentication, authorization, and traffic control in one place — without touching your backend code.
+
+## How Routing Works
+
+Every incoming request to N-Gate travels through a two-stage pipeline:
+
+1. **Route matching** — N-Gate inspects the request's path and HTTP method, then looks for a matching route definition in your workspace.
+2. **Proxying** — If a match is found (and the caller is authorized), N-Gate forwards the request to the route's configured target URL and streams the response back to the client.
+
+```
+Client Request
+      │
+      ▼
+┌─────────────────────────────────────────────┐
+│               N-GATE GATEWAY                │
+│                                             │
+│  1. Auth Enforcement (Bearer token check)   │
+│  2. Route Matching  (path + method)         │
+│  3. Authorization   (Permission Role check) │
+│  4. Proxy Forward   → Target Backend URL    │
+└─────────────────────────────────────────────┘
+      │
+      ▼
+ Backend Service (internal or external)
+      │
+      ▼
+ Response streamed back to client
+```
+
+<Note>
+  Route definitions are scoped to a workspace. The same path can exist in multiple workspaces without conflict — N-Gate resolves the correct route using the workspace context of the authenticated caller.
+</Note>
+
+---
+
+## Route Definitions
+
+A route is a configuration record that tells N-Gate:
+
+- **Path** — the URL pattern to match (e.g., `/payments/v1/charge`)
+- **Method** — the HTTP verb(s) to accept (`GET`, `POST`, `PUT`, `DELETE`, etc.)
+- **Target URL** — the upstream backend URL N-Gate should forward matching requests to
+- **Auth requirements** — whether the request must carry a valid Bearer token and what Permission Role is required
+
+You manage route definitions through the `/api/routes` endpoint.
+
+<CardGroup cols={2}>
+  <Card title="Path-Based Routing" icon="sitemap">
+    Match requests by exact path or path prefix. Longer, more specific paths take priority over shorter wildcard patterns.
+  </Card>
+  <Card title="Method Filtering" icon="filter">
+    Restrict a route to one or more HTTP methods. A `POST /orders` route will not intercept `GET /orders` — each combination is an independent match rule.
+  </Card>
+  <Card title="Target URL Forwarding" icon="arrow-up-right-from-square">
+    Set any reachable URL as the proxy target — internal microservices, third-party APIs, or legacy systems that cannot be exposed directly.
+  </Card>
+  <Card title="Auth Enforcement" icon="lock">
+    N-Gate validates the caller's Bearer token and Permission Role before proxying. Unauthenticated or unauthorized requests are rejected at the gateway — they never reach your backend.
+  </Card>
+</CardGroup>
+
+---
+
+## Managing Routes
+
+<Tabs>
+  <Tab title="Create a Route">
+    <Steps>
+      <Step title="Define your route payload">
+        Specify the path, HTTP method, and the backend target URL you want N-Gate to proxy to.
+
+        ```http
+        POST https://api.n-gate.io/api/routes
+        Authorization: Bearer <token>
+        Content-Type: application/json
+
+        {
+          "workspaceId": "wsp_abc123",
+          "path": "/payments/v1/charge",
+          "method": "POST",
+          "targetUrl": "https://internal-payments.corp.local/charge",
+          "requiresAuth": true
+        }
+        ```
+      </Step>
+      <Step title="Receive the route record">
+        N-Gate responds with the created route object, including a unique `routeId` you can reference for updates or deletion.
+
+        ```json
+        {
+          "routeId": "rt_xyz789",
+          "workspaceId": "wsp_abc123",
+          "path": "/payments/v1/charge",
+          "method": "POST",
+          "targetUrl": "https://internal-payments.corp.local/charge",
+          "requiresAuth": true,
+          "createdAt": "2024-01-15T11:00:00Z"
+        }
+        ```
+      </Step>
+      <Step title="Test the route">
+        Send a request to the proxy endpoint to verify N-Gate correctly forwards your request to the target backend (see the **Proxy a Request** tab).
+      </Step>
+    </Steps>
+  </Tab>
+
+  <Tab title="List Routes">
+    Retrieve all route definitions in your workspace.
+
+    ```http
+    GET https://api.n-gate.io/api/routes?workspaceId=wsp_abc123
+    Authorization: Bearer <token>
+    ```
+
+    The response returns a paginated array of route objects. Use the `path` and `method` fields to audit your routing table and spot any unintended overlaps.
+
+    <Tip>
+      Review your route list regularly as your API surface grows. Orphaned routes that point to decommissioned backends can become security liabilities if left active.
+    </Tip>
+  </Tab>
+
+  <Tab title="Update a Route">
+    Modify an existing route using its `routeId`. You can change the target URL, method filter, or auth requirements at any time — updates take effect immediately.
+
+    ```http
+    PATCH https://api.n-gate.io/api/routes/{routeId}
+    Authorization: Bearer <token>
+    Content-Type: application/json
+
+    {
+      "targetUrl": "https://payments-v2.corp.local/charge",
+      "requiresAuth": true
+    }
+    ```
+
+    <Warning>
+      Changing a route's `path` or `method` while traffic is flowing may cause in-flight requests to fail. Plan route modifications during a low-traffic window or behind a feature flag.
+    </Warning>
+  </Tab>
+
+  <Tab title="Delete a Route">
+    Remove a route permanently when the endpoint is no longer needed.
+
+    ```http
+    DELETE https://api.n-gate.io/api/routes/{routeId}
+    Authorization: Bearer <token>
+    ```
+
+    N-Gate stops accepting requests for the deleted path/method combination immediately. Any clients still sending traffic to that route will receive a `404 Not Found` response.
+  </Tab>
+</Tabs>
+
+---
+
+## Proxying Requests
+
+Once a route is defined, clients send their actual API calls to N-Gate's proxy endpoint at `/api/routes/proxy`. N-Gate matches the request to the correct route, enforces security policies, and forwards it to the target backend.
+
+<Steps>
+  <Step title="Construct the proxy request">
+    Include the `routeId` (or path-based routing context) and your original request payload. N-Gate uses this to identify which route to apply.
+
+    ```http
+    POST https://api.n-gate.io/api/routes/proxy
+    Authorization: Bearer <token>
+    Content-Type: application/json
+
+    {
+      "routeId": "rt_xyz789",
+      "method": "POST",
+      "body": {
+        "amount": 5000,
+        "currency": "USD",
+        "customerId": "cust_001"
+      },
+      "headers": {
+        "X-Request-ID": "req-abc-123"
+      }
+    }
+    ```
+  </Step>
+  <Step title="N-Gate enforces security">
+    Before forwarding, N-Gate validates your Bearer token, checks the Permission Role triplet for your workspace, and confirms the route is active. If any check fails, the proxy returns an appropriate error — no traffic reaches the backend.
+  </Step>
+  <Step title="Request forwarded to backend">
+    N-Gate forwards your request to the configured `targetUrl`, preserving headers, body, and method. The backend processes the request and returns a response.
+  </Step>
+  <Step title="Response returned to client">
+    N-Gate streams the backend's response — status code, headers, and body — directly back to your client. From the client's perspective, it looks like a direct API call.
+  </Step>
+</Steps>
+
+---
+
+## Use Cases
+
+<Accordion title="Expose internal services externally">
+  Your backend microservices may live on a private network with no public IP. By registering each service's internal URL as a route target, N-Gate becomes the single public-facing entry point — clients call N-Gate and never see your internal topology.
+</Accordion>
+
+<Accordion title="Add authentication to legacy services">
+  If you have an existing backend that has no authentication layer, point a route at it and enable `requiresAuth: true`. N-Gate will intercept all traffic and enforce Bearer token validation before anything reaches the legacy service — zero changes required on the backend.
+</Accordion>
+
+<Accordion title="Aggregate multiple backends behind one path">
+  Create multiple routes with different paths, each pointing to a different backend microservice. From a client's perspective, everything looks like a unified API hosted on a single domain — N-Gate handles the fan-out transparently.
+</Accordion>
+
+<Accordion title="Partner and third-party API access control">
+  Use routes combined with Gateway Consumers (see [Gateways & Consumers](/concepts/gateways)) to create authenticated, rate-limited pathways for external partners to call your services without receiving direct backend credentials.
+</Accordion>
+
+---
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Workspaces" icon="building" href="/concepts/workspaces">
+    Review how workspace isolation and Permission Roles govern who can create and modify routes.
+  </Card>
+  <Card title="Gateways & Consumers" icon="tower-broadcast" href="/concepts/gateways">
+    Connect upstream services and control which API consumers are authorized to route through them.
+  </Card>
+</CardGroup>

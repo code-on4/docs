@@ -1,0 +1,224 @@
+---
+title: "Gateway Consumers API — Authorize API Consumers"
+sidebarTitle: "Consumers"
+description: "Create, list, and remove gateway consumers that represent authorized API clients scoped to a specific gateway and workspace."
+---
+
+A gateway consumer represents an authorized client — such as a partner system, internal service, or third-party application — that is permitted to send requests through a specific N-Gate gateway. Consumers carry their own identity and are the unit against which rate limits, authentication policies, and access controls are applied. Every consumer is scoped to both a gateway and a workspace, giving you fine-grained control over which clients can reach which upstream services.
+
+---
+
+## List Consumers
+
+<br />
+
+```http
+GET /api/gateway-consumer
+```
+
+Returns a paginated list of gateway consumers. Use `gatewayId` and `workspaceId` together to narrow results to a specific gateway in a specific workspace.
+
+### Query Parameters
+
+<ParamField query="gatewayId" type="string">
+  Filter results to consumers belonging to this gateway.
+</ParamField>
+
+<ParamField query="workspaceId" type="string">
+  Filter results to consumers within this workspace.
+</ParamField>
+
+<ParamField query="page" type="integer" default="1">
+  Page number to retrieve. Starts at `1`.
+</ParamField>
+
+<ParamField query="limit" type="integer" default="20">
+  Number of records per page. Maximum is `100`.
+</ParamField>
+
+### Response
+
+<ResponseField name="data" type="array">
+  <Expandable title="Consumer object">
+    <ResponseField name="id" type="string">
+      Unique identifier for the consumer.
+    </ResponseField>
+    <ResponseField name="name" type="string">
+      Human-readable name for this consumer.
+    </ResponseField>
+    <ResponseField name="gatewayId" type="string">
+      The gateway this consumer is authorized to use.
+    </ResponseField>
+    <ResponseField name="workspaceId" type="string">
+      Workspace this consumer belongs to.
+    </ResponseField>
+    <ResponseField name="createdAt" type="string">
+      ISO 8601 creation timestamp.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="pagination" type="object">
+  <Expandable title="Pagination object">
+    <ResponseField name="page" type="integer">Current page number.</ResponseField>
+    <ResponseField name="limit" type="integer">Records per page.</ResponseField>
+    <ResponseField name="total" type="integer">Total number of matching records.</ResponseField>
+  </Expandable>
+</ResponseField>
+
+<CodeGroup>
+```bash cURL
+curl --request GET \
+  --url "https://api.n-gate.io/api/gateway-consumer?gatewayId=gw_abc123&workspaceId=ws_01&page=1&limit=20" \
+  --header "Authorization: Bearer <token>"
+```
+
+```json Response
+{
+  "data": [
+    {
+      "id": "con_xyz789",
+      "name": "Partner Portal",
+      "gatewayId": "gw_abc123",
+      "workspaceId": "ws_01",
+      "createdAt": "2024-11-16T10:30:00.000Z"
+    }
+  ],
+  "pagination": {
+    "page": 1,
+    "limit": 20,
+    "total": 1
+  }
+}
+```
+</CodeGroup>
+
+---
+
+## Create a Consumer
+
+<br />
+
+```http
+POST /api/gateway-consumer
+```
+
+Registers a new consumer against a gateway. Once created, the consumer can be issued credentials and assigned policies via separate API calls.
+
+<Note>
+  Consumer names must be unique within the same gateway. Two different gateways
+  in the same workspace may have consumers with identical names.
+</Note>
+
+### Body Parameters
+
+<ParamField body="name" type="string" required>
+  A unique name identifying this consumer within the gateway (e.g.
+  `"Partner Portal"`, `"Mobile App v2"`).
+</ParamField>
+
+<ParamField body="gatewayId" type="string" required>
+  The ID of the gateway this consumer will be authorized to access.
+</ParamField>
+
+<ParamField body="workspaceId" type="string" required>
+  The workspace under which this consumer is registered.
+</ParamField>
+
+### Response
+
+<ResponseField name="id" type="string">Unique ID assigned to the new consumer.</ResponseField>
+<ResponseField name="name" type="string">Consumer display name.</ResponseField>
+<ResponseField name="gatewayId" type="string">Associated gateway ID.</ResponseField>
+<ResponseField name="workspaceId" type="string">Owning workspace.</ResponseField>
+<ResponseField name="createdAt" type="string">ISO 8601 creation timestamp.</ResponseField>
+
+<CodeGroup>
+```bash cURL
+curl --request POST \
+  --url "https://api.n-gate.io/api/gateway-consumer" \
+  --header "Authorization: Bearer <token>" \
+  --header "Content-Type: application/json" \
+  --data '{
+    "name": "Partner Portal",
+    "gatewayId": "gw_abc123",
+    "workspaceId": "ws_01"
+  }'
+```
+
+```json Response
+{
+  "id": "con_xyz789",
+  "name": "Partner Portal",
+  "gatewayId": "gw_abc123",
+  "workspaceId": "ws_01",
+  "createdAt": "2024-11-16T10:30:00.000Z"
+}
+```
+</CodeGroup>
+
+---
+
+## Delete a Consumer
+
+<br />
+
+```http
+DELETE /api/gateway-consumer/:id
+```
+
+Permanently removes a consumer. All API keys, rate-limit rules, and policies associated with this consumer are also deleted. This action cannot be undone.
+
+### Path Parameters
+
+<ParamField path="id" type="string" required>
+  The unique ID of the consumer to remove.
+</ParamField>
+
+### Response
+
+<ResponseField name="message" type="string">
+  Confirmation string. Always `"Consumer removed"` on success.
+</ResponseField>
+
+<Warning>
+  Removing a consumer immediately revokes all credentials issued to it. Any
+  live integrations relying on those credentials will start receiving `401
+  Unauthorized` responses.
+</Warning>
+
+<CodeGroup>
+```bash cURL
+curl --request DELETE \
+  --url "https://api.n-gate.io/api/gateway-consumer/con_xyz789" \
+  --header "Authorization: Bearer <token>"
+```
+
+```json Response
+{
+  "message": "Consumer removed"
+}
+```
+</CodeGroup>
+
+---
+
+## Error Responses
+
+All errors follow the standard N-Gate error envelope:
+
+```json
+{
+  "error": "<message>",
+  "statusCode": 400,
+  "timestamp": "2024-11-16T10:35:00.000Z"
+}
+```
+
+| Status | Meaning                                                |
+| ------ | ------------------------------------------------------ |
+| `400`  | Missing or invalid body / query parameters.            |
+| `401`  | Missing or invalid Bearer token.                       |
+| `403`  | Token lacks consumer-write permission.                 |
+| `404`  | Consumer or gateway not found.                         |
+| `409`  | Consumer name already exists on the specified gateway. |

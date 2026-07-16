@@ -1,20 +1,82 @@
 ---
-title: "Introduction"
-description: "Welcome to your project"
+title: "N-Gate: Multi-Tenant API Gateway & Integration Platform"
+sidebarTitle: "Home"
+description: "N-Gate is a secure API gateway for institutions. Proxy traffic, manage workspaces, coordinate remote agents, and handle financial transactions in one platform."
 ---
 
-Write a short description of your product here. What it does, who it's for, and what they can accomplish with it.
+N-Gate is a multi-tenant API Gateway, Infrastructure, and Integration Platform designed for institutions that need a secure bridge between their services. It lets you manage workspaces and teams, proxy API traffic to backend services, administer connected gateways and consumers, process business mandates, and coordinate physical or virtual remote infrastructure agents — all through a unified API secured by Bearer token authentication.
 
-<Tip>
-  Ready to make this your own? Start by editing this page. Update your `docs.json` file to customize your site. Then fill out the [Quickstart](/quickstart) page.
-</Tip>
+<CardGroup cols={2}>
+  <Card title="Quick Start" icon="rocket" href="/quickstart">
+    Get your first authenticated API call running in minutes
+  </Card>
+  <Card title="Authentication" icon="lock" href="/authentication">
+    Learn how to obtain and use Bearer tokens to secure your requests
+  </Card>
+  <Card title="Core Concepts" icon="book" href="/concepts/workspaces">
+    Understand workspaces, routing, and gateways before you build
+  </Card>
+  <Card title="API Reference" icon="code" href="/api-reference/overview">
+    Explore the full REST API with request and response examples
+  </Card>
+</CardGroup>
 
-<Card title="Quickstart" icon="rocket" href="/quickstart">
-  This card links to the quickstart page in your project.
-</Card>
-<Card title="Components" icon="puzzle-piece" href="https://mintlify.com/docs/components">
-  Add cards, callouts, steps, tabs, and more to design and structure your pages.
-</Card>
-<Card title="Settings" icon="gear" href="https://mintlify.com/docs/organize/settings">
-  Set your site name, branding, and navigation in the `docs.json` file.
-</Card>
+## Who Uses N-Gate?
+
+N-Gate is built for three primary developer personas, each with dedicated guides to get you productive fast.
+
+<CardGroup cols={3}>
+  <Card title="Tenant Administrators" icon="building" href="/guides/tenant-admin">
+    Manage institutions, workspaces, permissions, and team invitations
+  </Card>
+  <Card title="Integration Engineers" icon="arrows-turn-to-dots" href="/guides/integration-engineer">
+    Set up proxy routes, configure gateways, and manage API consumers
+  </Card>
+  <Card title="Operations & Support" icon="tower-control" href="/guides/operations">
+    Monitor airtime transactions and manage remote-hand infrastructure
+  </Card>
+</CardGroup>
+
+## Platform Features
+
+<CardGroup cols={2}>
+  <Card title="Workspace & Identity" icon="users" href="/features/permissions">
+    Fine-grained permission roles govern access within every workspace
+  </Card>
+  <Card title="API Routing & Proxying" icon="route" href="/features/proxy-routes">
+    Dynamically define routes and proxy requests to target backend services
+  </Card>
+  <Card title="Gateways & Consumers" icon="plug" href="/features/gateway-consumers">
+    Register upstream gateways and authorize the API consumers that use them
+  </Card>
+  <Card title="Mandates & Airtime" icon="file-invoice" href="/features/mandates">
+    Process business mandates via document upload and manage telecom transactions
+  </Card>
+  <Card title="Remote Hand Agents" icon="microchip" href="/features/remote-hand-agents">
+    Control plane for physical and logical remote infrastructure agents
+  </Card>
+  <Card title="System Administration" icon="gear" href="/features/system-admin">
+    Upload system configuration and regenerate SSL/TLS certificates dynamically
+  </Card>
+</CardGroup>
+
+## Getting Started
+
+<Steps>
+  <Step title="Authenticate">
+    Call `POST /auth/login` with your credentials to receive a Bearer token. Include it in the `Authorization` header on every subsequent request.
+  </Step>
+  <Step title="Create a Workspace">
+    Use `POST /api/workspaces` to provision a new workspace for your institution. Workspaces are the root container for all resources in N-Gate.
+  </Step>
+  <Step title="Configure Your First Route">
+    Define a proxy route with `POST /api/routes`, pointing N-Gate at your target backend service. Then call `POST /api/routes/proxy` to forward requests through it.
+  </Step>
+  <Step title="Invite Your Team">
+    Use `POST /api/workspaces/:workspaceId/invite` to bring team members into your workspace and assign them Permission Roles.
+  </Step>
+</Steps>
+
+<Note>
+  All N-Gate API endpoints except `/auth/login` require a valid Bearer token. See the [Authentication guide](/authentication) for details.
+</Note>

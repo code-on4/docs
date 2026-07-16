@@ -1,0 +1,113 @@
+---
+title: "Introduction to N-Gate: API Gateway & Integration Platform"
+sidebarTitle: "Introduction"
+description: "Learn what N-Gate is, how it works, and which features help your team manage APIs, routes, gateways, and integrations at scale."
+---
+
+N-Gate is a multi-tenant API Gateway and Integration Platform designed to give teams a single, secure control plane for managing API routing, consumer access, financial transactions, and infrastructure operations. Whether you're an enterprise integrating third-party services, a financial institution routing payment traffic, or an operations team managing remote infrastructure agents, N-Gate provides the building blocks to govern, observe, and extend your API landscape — all within isolated, permission-controlled Workspaces.
+
+## What You Can Do with N-Gate
+
+N-Gate consolidates capabilities that teams would otherwise stitch together from multiple tools. Instead of managing a reverse proxy, an identity layer, a billing integration, and an ops dashboard separately, you get a unified platform where every action is authenticated, scoped to a Workspace, and logged for audit.
+
+At a high level, N-Gate helps you:
+
+- **Route API traffic** through centrally managed, version-controlled route definitions
+- **Proxy requests** to upstream services without exposing internal URLs to consumers
+- **Manage Workspaces** to isolate tenants, teams, or environments from one another
+- **Control consumer access** to Gateways using granular permission roles
+- **Execute financial mandates** and track airtime transactions across integrations
+- **Operate remote infrastructure** using the Remote Hand Agent system
+- **Administer the platform** with system-level configuration and SSL management tools
+
+---
+
+## Core Functional Pillars
+
+N-Gate is organized around six functional areas. Understanding these pillars helps you navigate the platform and find the right tools for your use case.
+
+### Workspace & Identity
+
+Every resource in N-Gate lives inside a **Workspace**. A Workspace represents a logical tenant — it could be an organization, a team, or a deployment environment. Users belong to one or more Workspaces and are granted access through **Permission Roles** that control what they can read, create, or modify.
+
+All API calls (except `POST /auth/login`) require a valid Bearer token. Tokens are issued per user and scoped to their Workspace memberships. This model ensures that data and configuration never leak across tenant boundaries.
+
+### API Routing & Proxying
+
+Routes define the mapping between an inbound API path and an upstream target service. You create route definitions via `POST /api/routes`, specifying the path, HTTP method, and target URL. Once a route exists, you can forward traffic through it using `POST /api/routes/proxy`, which acts as an authenticated passthrough layer — your upstream URL stays private while N-Gate handles authentication, logging, and policy enforcement on the edge.
+
+### Gateways & Consumers
+
+A **Gateway** is a logical entry point that groups related routes and applies shared policies — rate limiting, authentication schemes, or traffic shaping rules. **Gateway Consumers** are identities (users, services, or applications) that are granted access to a specific Gateway. Managing consumers through `GET /api/gateway-consumer` and `POST /api/gateway-consumer` lets you control exactly who can call which Gateway and under what conditions.
+
+### Financial & Core Transactions
+
+N-Gate includes first-class support for financial operations. The **Mandates** feature (`POST /api/mandates`) lets you create standing authorization records for recurring or pre-approved transactions. The **Airtime Transactions** ledger (`GET /api/airtime-transactions`) gives you a queryable record of all airtime operations processed through the platform — useful for reconciliation, reporting, and support workflows.
+
+### Remote Hand Agents
+
+The **Remote Hand Agent** system lets you register, configure, and interact with remote infrastructure agents — physical or virtual workers that execute tasks on your behalf at a remote site. Using `GET`, `POST`, and `PUT` on `/api/remote-hand-agent`, you can onboard new agents, update their configuration, and query their current status. This feature is especially useful for managed service providers and distributed infrastructure teams.
+
+### System Administration
+
+Platform administrators control low-level configuration through the System Administration endpoints. `POST /api/system/config` lets you update global platform settings, while `POST /api/system/ssl/regenerate` triggers a refresh of TLS certificates — critical for keeping your API surface secure during certificate rotation cycles.
+
+---
+
+## Architecture Overview
+
+When a request enters N-Gate, it flows through a layered processing pipeline:
+
+1. **Authentication Layer** — Every inbound request is checked for a valid Bearer token. Unauthenticated requests are rejected at the edge before reaching any business logic.
+2. **Workspace Resolution** — The authenticated identity is mapped to its Workspace(s) and Permission Role(s). This determines what resources the caller can access.
+3. **Route Matching** — For proxied requests, N-Gate matches the request against the registered route definitions in the caller's Workspace.
+4. **Policy Enforcement** — Gateway-level policies (rate limits, consumer allow-lists, etc.) are evaluated before the request is forwarded.
+5. **Upstream Proxy** — N-Gate forwards the request to the configured upstream target, injecting any necessary headers or credentials.
+6. **Response & Logging** — The upstream response is returned to the caller, and the transaction is logged for audit and observability.
+
+This pipeline means your upstream services never need to handle authentication, rate limiting, or tenant isolation directly — N-Gate handles it all on the way in.
+
+---
+
+## Developer Personas
+
+N-Gate is built for three primary personas. Each section of this documentation is written with these roles in mind.
+
+<CardGroup cols={3}>
+  <Card title="Tenant Administrators" icon="building">
+    You own one or more Workspaces and are responsible for creating routes, managing gateway consumers, and assigning permission roles to teammates. You spend most of your time in the Workspace, Gateways, and Identity sections.
+  </Card>
+  <Card title="Integration Engineers" icon="code">
+    You build and maintain service integrations using N-Gate's routing and proxy layer. You work primarily with route definitions, the proxy endpoint, and mandate configurations. You need reliable request/response documentation and code examples.
+  </Card>
+  <Card title="Operations & Support" icon="wrench">
+    You monitor infrastructure health, manage remote hand agents, review transaction logs, and handle platform-level configuration. You work across the Remote Hand Agent, Airtime Transactions, and System Administration sections.
+  </Card>
+</CardGroup>
+
+---
+
+## Where to Go Next
+
+Use the cards below to jump to the section most relevant to your role or current task.
+
+<CardGroup cols={2}>
+  <Card title="Quick Start" icon="rocket" href="/quickstart">
+    Authenticate, create your first Workspace, and make a proxied API request in under five minutes.
+  </Card>
+  <Card title="Authentication" icon="lock" href="/authentication">
+    Learn how Bearer token authentication works, how to handle token expiry, and security best practices.
+  </Card>
+  <Card title="Workspaces" icon="layer-group" href="/concepts/workspaces">
+    Create and manage Workspaces, invite users, and configure Permission Roles for your team.
+  </Card>
+  <Card title="Routes & Proxying" icon="route" href="/features/proxy-routes">
+    Define API routes and forward traffic to upstream services through the N-Gate proxy layer.
+  </Card>
+  <Card title="Gateways & Consumers" icon="shield" href="/features/gateway-consumers">
+    Set up Gateways, register consumers, and apply access control policies.
+  </Card>
+  <Card title="Remote Hand Agents" icon="server" href="/features/remote-hand-agents">
+    Register and manage remote agents for distributed infrastructure operations.
+  </Card>
+</CardGroup>

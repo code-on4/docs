@@ -1,0 +1,265 @@
+---
+title: "Authentication: Bearer Tokens in N-Gate"
+sidebarTitle: "Authentication"
+description: "Learn how to obtain and use Bearer tokens to authenticate with N-Gate, handle token expiry, and follow security best practices."
+---
+
+N-Gate uses Bearer token authentication to protect every endpoint on the platform. When you log in, N-Gate issues a signed JSON Web Token (JWT) that proves your identity and encodes your Workspace memberships and permission roles. You include this token in the `Authorization` header of every subsequent API request — no cookies, no API keys, no session state. This stateless model makes N-Gate easy to integrate from any HTTP client, script, or service.
+
+---
+
+## How Bearer Token Authentication Works
+
+Every API request you send to N-Gate (except `POST /auth/login`) must include an `Authorization` header in the following format:
+
+```
+Authorization: Bearer <your-token>
+```
+
+When N-Gate receives a request, it:
+
+1. Reads the token from the `Authorization` header
+2. Verifies the token's signature and checks that it hasn't expired
+3. Extracts your identity, Workspace memberships, and permission roles from the token's claims
+4. Allows or rejects the request based on whether your role permits the action you're attempting
+
+If the header is missing, malformed, or contains an expired token, N-Gate rejects the request before it reaches any business logic.
+
+---
+
+## Step 1: Obtain a Token
+
+Call `POST /auth/login` with your email and password. This is the **only** endpoint that does not require an `Authorization` header.
+
+<CodeGroup>
+
+```bash curl
+curl -X POST https://api.n-gate.io/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "admin@example.com",
+    "password": "your-password"
+  }'
+```
+
+```python Python
+import requests
+
+response = requests.post(
+    "https://api.n-gate.io/auth/login",
+    json={
+        "email": "admin@example.com",
+        "password": "your-password"
+    }
+)
+
+data = response.json()
+token = data["token"]
+print(f"Token: {token}")
+```
+
+```javascript Node.js
+const response = await fetch("https://api.n-gate.io/auth/login", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({
+    email: "admin@example.com",
+    password: "your-password",
+  }),
+});
+
+const data = await response.json();
+const token = data.token;
+console.log("Token:", token);
+```
+
+</CodeGroup>
+
+**Request body**
+
+<ParamField body="email" type="string" required>
+  The email address associated with your N-Gate account.
+</ParamField>
+
+<ParamField body="password" type="string" required>
+  Your account password.
+</ParamField>
+
+**Example response**
+
+<ResponseField name="token" type="string">
+  The Bearer token to include in subsequent request headers. This is a signed JWT.
+</ResponseField>
+
+<ResponseField name="user" type="object">
+  Basic information about the authenticated user.
+
+  <Expandable title="user fields">
+    <ResponseField name="user.id" type="string">
+      The unique identifier for your user account (e.g., `usr_abc123`).
+    </ResponseField>
+
+    <ResponseField name="user.email" type="string">
+      The email address of the authenticated user.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+```json
+{
+  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1c3JfYWJjMTIzIiwid29ya3NwYWNlcyI6WyJ3c19hYmMxMjMiXSwiaWF0IjoxNzA1MzEyMDAwLCJleHAiOjE3MDUzOTg0MDB9.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c",
+  "user": {
+    "id": "usr_abc123",
+    "email": "admin@example.com"
+  }
+}
+```
+
+---
+
+## Step 2: Include the Token in Requests
+
+Once you have a token, add it to the `Authorization` header of every API request. The format is always `Bearer ` followed by your token string — note the space between `Bearer` and the token value.
+
+<CodeGroup>
+
+```bash curl
+curl -X GET https://api.n-gate.io/api/workspaces \
+  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+```
+
+```python Python
+import requests
+
+TOKEN = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+
+headers = {
+    "Authorization": f"Bearer {TOKEN}",
+    "Content-Type": "application/json",
+}
+
+response = requests.get(
+    "https://api.n-gate.io/api/workspaces",
+    headers=headers
+)
+
+print(response.json())
+```
+
+```javascript Node.js
+const TOKEN = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...";
+
+const response = await fetch("https://api.n-gate.io/api/workspaces", {
+  method: "GET",
+  headers: {
+    Authorization: `Bearer ${TOKEN}`,
+    "Content-Type": "application/json",
+  },
+});
+
+const data = await response.json();
+console.log(data);
+```
+
+</CodeGroup>
+
+<Tip>
+  In production applications, read the token from an environment variable or a secrets manager rather than hardcoding it. For example, store it as `NGATE_TOKEN` and reference it with `process.env.NGATE_TOKEN` (Node.js) or `os.environ["NGATE_TOKEN"]` (Python).
+</Tip>
+
+---
+
+## Token Expiry and Re-Authentication
+
+N-Gate tokens are time-limited. When your token expires, every API call will return a `401 Unauthorized` response. To recover, simply call `POST /auth/login` again with your credentials — N-Gate will issue a fresh token.
+
+A robust integration handles token expiry automatically. Here's a simple retry pattern in Python:
+
+```python Python
+import requests
+
+BASE_URL = "https://api.n-gate.io"
+
+def get_token(email: str, password: str) -> str:
+    response = requests.post(
+        f"{BASE_URL}/auth/login",
+        json={"email": email, "password": password}
+    )
+    response.raise_for_status()
+    return response.json()["token"]
+
+def api_request(method: str, path: str, token: str, **kwargs):
+    headers = kwargs.pop("headers", {})
+    headers["Authorization"] = f"Bearer {token}"
+    response = requests.request(
+        method, f"{BASE_URL}{path}", headers=headers, **kwargs
+    )
+
+    if response.status_code == 401:
+        # Token expired — re-authenticate and retry once
+        new_token = get_token("admin@example.com", "your-password")
+        headers["Authorization"] = f"Bearer {new_token}"
+        response = requests.request(
+            method, f"{BASE_URL}{path}", headers=headers, **kwargs
+        )
+
+    response.raise_for_status()
+    return response.json()
+```
+
+<Note>
+  For long-running services, consider proactively refreshing your token before it expires by inspecting the `exp` claim in the JWT payload, rather than waiting for a `401` to trigger re-authentication.
+</Note>
+
+---
+
+## Common Authentication Errors
+
+### 401 Unauthorized
+
+A `401` response means N-Gate could not authenticate your request. Common causes:
+
+- **Missing `Authorization` header** — You forgot to include the header entirely.
+- **Malformed header** — The header value doesn't follow the `Bearer <token>` format (e.g., missing the `Bearer ` prefix, or extra whitespace).
+- **Expired token** — The token's `exp` claim has passed. Re-authenticate to get a new token.
+- **Invalid token** — The token signature doesn't match (e.g., the token was tampered with or issued by a different environment).
+
+**How to fix:** Re-authenticate via `POST /auth/login` and use the new token. If the error persists, verify that you're calling `https://api.n-gate.io` and not a staging or local URL that uses a different signing key.
+
+### 403 Forbidden
+
+A `403` response means N-Gate authenticated your request successfully but your Permission Role does not allow the action you're attempting.
+
+Common causes:
+
+- You're trying to access a resource (e.g., a Workspace or Gateway) that your account isn't a member of.
+- Your role is read-only but you're attempting a `POST` or `PUT` operation.
+- You're calling a System Administration endpoint (e.g., `POST /api/system/config`) without the required admin role.
+
+**How to fix:** Contact your Workspace administrator to review and update your Permission Role. Check that you're scoping requests to Workspaces your account has been invited to.
+
+<Warning>
+  Do not retry `403` errors in a loop — your role won't change between requests. A `403` always requires a configuration or permission change by an administrator.
+</Warning>
+
+---
+
+## Security Best Practices
+
+Following these practices keeps your integrations secure and your tokens safe:
+
+- **Never pass tokens in URLs.** URL query parameters appear in server logs, browser history, and HTTP referrer headers. Always use the `Authorization` header.
+- **Store tokens in environment variables or secrets managers.** Tools like AWS Secrets Manager, HashiCorp Vault, or even a `.env` file (gitignored) are safer than hardcoding values in source code.
+- **Never commit tokens to source control.** Set up a pre-commit hook or use a tool like `git-secrets` to scan for credential patterns before pushing.
+- **Rotate tokens regularly.** Treat tokens like passwords — re-authenticate periodically, especially after team member offboarding or a suspected compromise.
+- **Use short-lived tokens in automated pipelines.** If your CI/CD system calls N-Gate, generate a token at pipeline start and discard it at the end, rather than reusing a long-lived token stored in a variable.
+- **Scope access by role.** Use the minimum Permission Role needed for each integration. A read-only reporting service doesn't need write permissions.
+
+<CardGroup cols={2}>
+  <Card title="Quick Start" icon="rocket" href="/quickstart">
+    See authentication in action as part of the end-to-end quick start flow.
+  </Card>
+  <Card title="Introduction" icon="book" href="/introduction">
+    Learn about Workspace & Identity and how permissions are structured across N-Gate.
+  </Card>
+</CardGroup>
